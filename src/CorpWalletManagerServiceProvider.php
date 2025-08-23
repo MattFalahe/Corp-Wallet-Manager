@@ -38,6 +38,8 @@ class CorpWalletManagerServiceProvider extends AbstractSeatPlugin
 
     public function registerPlugin()
     {
-        //
+        $this->commands([
+        \Seat\CorpWalletManager\Console\Commands\BackfillWalletDataCommand::class,
+        ]);
     }
 }
