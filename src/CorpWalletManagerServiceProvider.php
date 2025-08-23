@@ -12,6 +12,11 @@ class CorpWalletManagerServiceProvider extends AbstractSeatPlugin
         $this->loadViewsFrom(__DIR__.'/resources/views', 'corpwalletmanager');
         $this->loadMigrationsFrom(__DIR__.'/database/migrations');
 
+        // Run backfill once after installation
+        if (!\Seat\CorpWalletManager\Models\MonthlyBalance::exists()) {
+            \Seat\CorpWalletManager\Jobs\BackfillWalletData::dispatch();
+        }        
+
         $this->addCorporationMenuItem('CorpWallet Manager (Directors)', [
             'route' => 'corpwalletmanager.director',
             'permission' => 'corporation.wallet.view',
