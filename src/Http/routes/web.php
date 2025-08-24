@@ -24,6 +24,18 @@ Route::group([
     Route::get('/api/monthly-comparison', 'WalletController@monthlyComparison')
         ->name('corpwalletmanager.monthly')
         ->middleware('can:corporation.wallet.view');
+        
+    Route::get('/api/predictions', 'WalletController@predictions')
+        ->name('corpwalletmanager.predictions')
+        ->middleware('can:corporation.wallet.view');
+        
+    Route::get('/api/division-breakdown', 'WalletController@divisionBreakdown')
+        ->name('corpwalletmanager.divisions')
+        ->middleware('can:corporation.wallet.view');
+        
+    Route::get('/api/summary', 'WalletController@summary')
+        ->name('corpwalletmanager.summary')
+        ->middleware('can:corporation.wallet.view');
     
     // Settings routes
     Route::get('/settings', 'SettingsController@index')
