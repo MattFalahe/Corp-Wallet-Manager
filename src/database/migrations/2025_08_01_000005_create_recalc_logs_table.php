@@ -1,5 +1,4 @@
 <?php
-// 2025_08_01_000005_create_recalc_logs_table.php
 use Illuminate\Database\Migrations\Migration;
 use Illuminate\Database\Schema\Blueprint;
 use Illuminate\Support\Facades\Schema;
@@ -18,7 +17,10 @@ return new class extends Migration {
             $table->integer('records_processed')->default(0);
             $table->timestamps();
             
+            // Indexes for performance
             $table->index(['job_type', 'corporation_id', 'status']);
+            $table->index(['status', 'started_at']);
+            $table->index('corporation_id');
         });
     }
 
