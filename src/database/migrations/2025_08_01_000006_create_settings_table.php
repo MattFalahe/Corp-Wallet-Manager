@@ -12,6 +12,7 @@ return new class extends Migration {
             $table->text('value');
             $table->timestamps();
             
+            // Index for performance
             $table->index('key');
         });
     }
