@@ -1,12 +1,14 @@
 <?php
-
 namespace Seat\CorpWalletManager\Http\Controllers;
 
 use Illuminate\Routing\Controller;
 use Illuminate\Http\Request;
 use Seat\CorpWalletManager\Models\Settings;
+use Seat\CorpWalletManager\Models\RecalcLog;
 use Seat\CorpWalletManager\Jobs\BackfillWalletData;
 use Seat\CorpWalletManager\Jobs\ComputeDailyPrediction;
+use Seat\CorpWalletManager\Jobs\BackfillDivisionWalletData;
+use Seat\CorpWalletManager\Jobs\ComputeDivisionDailyPrediction;
 
 class SettingsController extends Controller
 {
@@ -29,7 +31,13 @@ class SettingsController extends Controller
         
         $settings = array_merge($defaultSettings, $settings);
         
-        return view('corpwalletmanager::settings', compact('settings'));
+        // Get recent job logs for display
+        $recentLogs = RecalcLog::with('corporation')
+            ->orderBy('started_at', 'desc')
+            ->limit(10)
+            ->get();
+        
+        return view('corpwalletmanager::settings', compact('settings', 'recentLogs'));
     }
 
     /**
@@ -58,10 +66,7 @@ class SettingsController extends Controller
         foreach ($settingsToUpdate as $key) {
             $value = $request->input($key);
             if ($value !== null) {
-                Settings::updateOrCreate(
-                    ['key' => $key],
-                    ['value' => is_bool($value) ? ($value ? '1' : '0') : $value]
-                );
+                Settings::setSetting($key, is_bool($value) ? ($value ? '1' : '0') : $value);
             }
         }
 
@@ -83,7 +88,7 @@ class SettingsController extends Controller
     }
 
     /**
-     * Trigger manual backfill
+     * Trigger manual wallet backfill
      */
     public function triggerBackfill()
     {
@@ -91,7 +96,7 @@ class SettingsController extends Controller
         
         return redirect()
             ->route('corpwalletmanager.settings')
-            ->with('success', 'Backfill job dispatched!');
+            ->with('success', 'Wallet backfill job dispatched!');
     }
 
     /**
@@ -103,6 +108,58 @@ class SettingsController extends Controller
         
         return redirect()
             ->route('corpwalletmanager.settings')
-            ->with('success', 'Prediction computation dispatched!');
+            ->with('success', 'Prediction computation job dispatched!');
+    }
+    
+    /**
+     * Trigger division backfill
+     */
+    public function triggerDivisionBackfill()
+    {
+        BackfillDivisionWalletData::dispatch();
+        
+        return redirect()
+            ->route('corpwalletmanager.settings')
+            ->with('success', 'Division backfill job dispatched!');
+    }
+    
+    /**
+     * Trigger division prediction computation
+     */
+    public function triggerDivisionPrediction()
+    {
+        ComputeDivisionDailyPrediction::dispatch();
+        
+        return redirect()
+            ->route('corpwalletmanager.settings')
+            ->with('success', 'Division prediction job dispatched!');
+    }
+    
+    /**
+     * Get job status via AJAX
+     */
+    public function jobStatus()
+    {
+        $runningJobs = RecalcLog::running()
+            ->orderBy('started_at', 'desc')
+            ->get();
+            
+        $recentJobs = RecalcLog::orderBy('started_at', 'desc')
+            ->limit(5)
+            ->get();
+        
+        return response()->json([
+            'running_jobs' => $runningJobs->count(),
+            'recent_jobs' => $recentJobs->map(function ($log) {
+                return [
+                    'id' => $log->id,
+                    'job_type' => $log->job_type_display,
+                    'status' => $log->status,
+                    'started_at' => $log->started_at->format('Y-m-d H:i:s'),
+                    'duration' => $log->formatted_duration,
+                    'records_processed' => $log->records_processed,
+                ];
+            })
+        ]);
     }
 }
