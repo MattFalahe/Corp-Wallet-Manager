@@ -58,4 +58,16 @@ Route::group([
     Route::post('/settings/prediction', 'SettingsController@triggerPrediction')
         ->name('corpwalletmanager.settings.prediction')
         ->middleware('can:corporation.wallet.view');
+        
+    Route::post('/settings/division-backfill', 'SettingsController@triggerDivisionBackfill')
+        ->name('corpwalletmanager.settings.division-backfill')
+        ->middleware('can:corporation.wallet.view');
+        
+    Route::post('/settings/division-prediction', 'SettingsController@triggerDivisionPrediction')
+        ->name('corpwalletmanager.settings.division-prediction')
+        ->middleware('can:corporation.wallet.view');
+        
+    Route::get('/settings/job-status', 'SettingsController@jobStatus')
+        ->name('corpwalletmanager.settings.job-status')
+        ->middleware('can:corporation.wallet.view');
 });
