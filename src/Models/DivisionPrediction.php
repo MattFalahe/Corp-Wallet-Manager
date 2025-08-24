@@ -1,5 +1,4 @@
 <?php
-
 // DivisionPrediction.php  
 namespace Seat\CorpWalletManager\Models;
 
