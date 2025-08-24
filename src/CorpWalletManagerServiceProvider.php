@@ -8,7 +8,7 @@ class CorpWalletManagerServiceProvider extends AbstractSeatPlugin
     public function bootPlugin()
     {
         $this->mergeConfigFrom(__DIR__.'/Config/corpwalletmanager.php', 'corpwalletmanager');
-        $this->loadRoutesFrom(__DIR__.'/routes/web.php');
+        $this->loadRoutesFrom(__DIR__.'/Http/routes/web.php');
         $this->loadViewsFrom(__DIR__.'/resources/views', 'corpwalletmanager');
         $this->loadMigrationsFrom(__DIR__.'/database/migrations');
 
