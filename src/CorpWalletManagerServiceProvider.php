@@ -16,7 +16,8 @@ class CorpWalletManagerServiceProvider extends AbstractSeatPlugin
         if (!\Seat\CorpWalletManager\Models\MonthlyBalance::exists()) {
             \Seat\CorpWalletManager\Jobs\BackfillWalletData::dispatch();
         }        
-
+        
+        // Menu items
         $this->addCorporationMenuItem('CorpWallet Manager (Directors)', [
             'route' => 'corpwalletmanager.director',
             'permission' => 'corporation.wallet.view',
