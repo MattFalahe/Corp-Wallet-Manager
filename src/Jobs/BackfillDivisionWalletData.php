@@ -1,5 +1,4 @@
 <?php
-// BackfillDivisionWalletData.php
 namespace Seat\CorpWalletManager\Jobs;
 
 use Illuminate\Bus\Queueable;
