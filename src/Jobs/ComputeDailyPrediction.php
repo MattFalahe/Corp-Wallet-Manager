@@ -1,5 +1,4 @@
 <?php
-// ComputeDailyPrediction.php
 namespace Seat\CorpWalletManager\Jobs;
 
 use Illuminate\Bus\Queueable;
