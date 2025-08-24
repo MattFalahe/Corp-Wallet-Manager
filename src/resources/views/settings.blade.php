@@ -124,19 +124,89 @@
             <div class="card-body">
                 <p>Use these tools to manually trigger data processing jobs.</p>
                 
-                <form action="{{ route('corpwalletmanager.settings.backfill') }}" method="POST" class="d-inline">
-                    @csrf
-                    <button type="submit" class="btn btn-info">
-                        <i class="fa fa-database"></i> Trigger Backfill
-                    </button>
-                </form>
-                
-                <form action="{{ route('corpwalletmanager.settings.prediction') }}" method="POST" class="d-inline ml-2">
-                    @csrf
-                    <button type="submit" class="btn btn-success">
-                        <i class="fa fa-calculator"></i> Compute Predictions
-                    </button>
-                </form>
+                <div class="row">
+                    <div class="col-md-6">
+                        <h5>Basic Jobs</h5>
+                        <form action="{{ route('corpwalletmanager.settings.backfill') }}" method="POST" class="d-inline">
+                            @csrf
+                            <button type="submit" class="btn btn-info mb-2">
+                                <i class="fa fa-database"></i> Wallet Backfill
+                            </button>
+                        </form>
+                        
+                        <form action="{{ route('corpwalletmanager.settings.prediction') }}" method="POST" class="d-inline ml-2">
+                            @csrf
+                            <button type="submit" class="btn btn-success mb-2">
+                                <i class="fa fa-calculator"></i> Compute Predictions
+                            </button>
+                        </form>
+                    </div>
+                    
+                    <div class="col-md-6">
+                        <h5>Division Jobs</h5>
+                        <form action="{{ route('corpwalletmanager.settings.division-backfill') }}" method="POST" class="d-inline">
+                            @csrf
+                            <button type="submit" class="btn btn-info mb-2">
+                                <i class="fa fa-th"></i> Division Backfill
+                            </button>
+                        </form>
+                        
+                        <form action="{{ route('corpwalletmanager.settings.division-prediction') }}" method="POST" class="d-inline ml-2">
+                            @csrf
+                            <button type="submit" class="btn btn-success mb-2">
+                                <i class="fa fa-chart-bar"></i> Division Predictions
+                            </button>
+                        </form>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="card mt-3">
+            <div class="card-header">
+                <h3 class="card-title">Job Status</h3>
+            </div>
+            <div class="card-body">
+                <div class="table-responsive">
+                    <table class="table table-striped">
+                        <thead>
+                            <tr>
+                                <th>Job Type</th>
+                                <th>Status</th>
+                                <th>Started</th>
+                                <th>Duration</th>
+                                <th>Records</th>
+                                <th>Corporation</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            @forelse($recentLogs as $log)
+                                <tr>
+                                    <td>{{ $log->job_type_display }}</td>
+                                    <td>
+                                        <span class="badge {{ $log->status_badge_class }}">
+                                            {{ ucfirst($log->status) }}
+                                        </span>
+                                    </td>
+                                    <td>{{ $log->started_at->format('Y-m-d H:i:s') }}</td>
+                                    <td>{{ $log->formatted_duration }}</td>
+                                    <td>{{ number_format($log->records_processed) }}</td>
+                                    <td>
+                                        @if($log->corporation)
+                                            {{ $log->corporation->name ?? 'N/A' }}
+                                        @else
+                                            All
+                                        @endif
+                                    </td>
+                                </tr>
+                            @empty
+                                <tr>
+                                    <td colspan="6" class="text-center text-muted">No jobs found</td>
+                                </tr>
+                            @endforelse
+                        </tbody>
+                    </table>
+                </div>
             </div>
         </div>
     </div>
@@ -161,5 +231,18 @@ function resetSettings() {
         form.submit();
     }
 }
+
+// Auto-refresh job status every 30 seconds
+setInterval(function() {
+    fetch('{{ route("corpwalletmanager.settings.job-status") }}')
+        .then(response => response.json())
+        .then(data => {
+            // Update running jobs count if you want to show it somewhere
+            console.log('Running jobs:', data.running_jobs);
+        })
+        .catch(error => {
+            console.error('Error fetching job status:', error);
+        });
+}, 30000);
 </script>
 @endsection
