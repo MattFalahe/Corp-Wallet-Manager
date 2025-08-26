@@ -2,6 +2,7 @@
 namespace Seat\CorpWalletManager\Models;
 
 use Illuminate\Database\Eloquent\Model;
+use Illuminate\Support\Facades\Log;
 
 class DivisionPrediction extends Model
 {
@@ -26,7 +27,16 @@ class DivisionPrediction extends Model
      */
     public function corporation()
     {
-        return $this->belongsTo(\Seat\Eveapi\Models\Corporation\CorporationInfo::class, 'corporation_id', 'corporation_id');
+        try {
+            return $this->belongsTo(\Seat\Eveapi\Models\Corporation\CorporationInfo::class, 'corporation_id', 'corporation_id');
+        } catch (\Exception $e) {
+            Log::warning('DivisionPrediction: Corporation relationship error', [
+                'prediction_id' => $this->id,
+                'corporation_id' => $this->corporation_id,
+                'error' => $e->getMessage()
+            ]);
+            return null;
+        }
     }
     
     /**
@@ -34,6 +44,9 @@ class DivisionPrediction extends Model
      */
     public function scopeForCorporation($query, $corporationId)
     {
+        if (!is_numeric($corporationId)) {
+            return $query->whereRaw('1 = 0');
+        }
         return $query->where('corporation_id', $corporationId);
     }
     
@@ -42,6 +55,9 @@ class DivisionPrediction extends Model
      */
     public function scopeForDivision($query, $divisionId)
     {
+        if (!is_numeric($divisionId)) {
+            return $query->whereRaw('1 = 0');
+        }
         return $query->where('division_id', $divisionId);
     }
     
@@ -50,10 +66,19 @@ class DivisionPrediction extends Model
      */
     public function scopeDateRange($query, $startDate, $endDate = null)
     {
-        if ($endDate) {
-            return $query->whereBetween('date', [$startDate, $endDate]);
+        try {
+            if ($endDate) {
+                return $query->whereBetween('date', [$startDate, $endDate]);
+            }
+            return $query->where('date', '>=', $startDate);
+        } catch (\Exception $e) {
+            Log::warning('DivisionPrediction: Invalid date range', [
+                'start_date' => $startDate,
+                'end_date' => $endDate,
+                'error' => $e->getMessage()
+            ]);
+            return $query->whereRaw('1 = 0');
         }
-        return $query->where('date', '>=', $startDate);
     }
     
     /**
@@ -85,6 +110,10 @@ class DivisionPrediction extends Model
      */
     public function getDaysUntilAttribute()
     {
-        return now()->diffInDays($this->date, false);
+        try {
+            return now()->diffInDays($this->date, false);
+        } catch (\Exception $e) {
+            return null;
+        }
     }
 }
