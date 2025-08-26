@@ -7,6 +7,7 @@ use Illuminate\Foundation\Bus\Dispatchable;
 use Illuminate\Queue\InteractsWithQueue;
 use Illuminate\Queue\SerializesModels;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Log;
 use Carbon\Carbon;
 use Seat\CorpWalletManager\Models\Prediction;
 use Seat\CorpWalletManager\Models\MonthlyBalance;
@@ -17,6 +18,8 @@ class ComputeDailyPrediction implements ShouldQueue
     use Dispatchable, InteractsWithQueue, Queueable, SerializesModels;
 
     protected $corporationId;
+    public $timeout = 300; // 5 minutes
+    public $tries = 3;
 
     public function __construct($corporationId = null)
     {
@@ -25,14 +28,16 @@ class ComputeDailyPrediction implements ShouldQueue
 
     public function handle()
     {
-        $logEntry = RecalcLog::create([
-            'job_type' => 'daily_prediction',
-            'corporation_id' => $this->corporationId,
-            'status' => RecalcLog::STATUS_RUNNING,
-            'started_at' => now(),
-        ]);
-
+        $logEntry = null;
+        
         try {
+            $logEntry = RecalcLog::create([
+                'job_type' => 'daily_prediction',
+                'corporation_id' => $this->corporationId,
+                'status' => RecalcLog::STATUS_RUNNING,
+                'started_at' => now(),
+            ]);
+
             $processed = 0;
 
             if ($this->corporationId) {
@@ -44,7 +49,14 @@ class ComputeDailyPrediction implements ShouldQueue
                     ->pluck('corporation_id');
 
                 foreach ($corporationIds as $corpId) {
-                    $processed += $this->computePredictionsForCorporation($corpId);
+                    try {
+                        $processed += $this->computePredictionsForCorporation($corpId);
+                    } catch (\Exception $e) {
+                        Log::warning('ComputeDailyPrediction: Failed for corporation', [
+                            'corporation_id' => $corpId,
+                            'error' => $e->getMessage()
+                        ]);
+                    }
                 }
             }
 
@@ -54,18 +66,35 @@ class ComputeDailyPrediction implements ShouldQueue
                 'records_processed' => $processed,
             ]);
 
-        } catch (\Exception $e) {
-            $logEntry->update([
-                'status' => RecalcLog::STATUS_FAILED,
-                'completed_at' => now(),
-                'error_message' => $e->getMessage(),
+            Log::info('ComputeDailyPrediction completed successfully', [
+                'corporation_id' => $this->corporationId,
+                'records_processed' => $processed
             ]);
+
+        } catch (\Exception $e) {
+            if ($logEntry) {
+                $logEntry->update([
+                    'status' => RecalcLog::STATUS_FAILED,
+                    'completed_at' => now(),
+                    'error_message' => substr($e->getMessage(), 0, 1000),
+                ]);
+            }
+            
+            Log::error('ComputeDailyPrediction failed', [
+                'corporation_id' => $this->corporationId,
+                'error' => $e->getMessage()
+            ]);
+            
             throw $e;
         }
     }
 
     private function computePredictionsForCorporation($corporationId)
     {
+        if (!is_numeric($corporationId)) {
+            throw new \InvalidArgumentException('Invalid corporation ID');
+        }
+
         // Get the last 6 months of data for trend analysis
         $sixMonthsAgo = Carbon::now()->subMonths(6)->startOfMonth();
         
@@ -80,7 +109,10 @@ class ComputeDailyPrediction implements ShouldQueue
         }
 
         // Simple linear regression for trend prediction
-        $values = $balances->pluck('balance')->toArray();
+        $values = $balances->pluck('balance')->map(function ($val) {
+            return (float)$val;
+        })->toArray();
+        
         $avg = array_sum($values) / count($values);
         
         // Calculate trend (simple moving average)
@@ -88,9 +120,9 @@ class ComputeDailyPrediction implements ShouldQueue
         if (count($values) > 1) {
             $recent = array_slice($values, -3); // Last 3 months
             $older = array_slice($values, 0, 3); // First 3 months
-            $recentAvg = array_sum($recent) / count($recent);
-            $olderAvg = array_sum($older) / count($older);
-            $trend = ($recentAvg - $olderAvg) / 3; // Monthly trend
+            $recentAvg = count($recent) > 0 ? array_sum($recent) / count($recent) : 0;
+            $olderAvg = count($older) > 0 ? array_sum($older) / count($older) : 0;
+            $trend = $recentAvg != $olderAvg ? ($recentAvg - $olderAvg) / 3 : 0; // Monthly trend
         }
 
         // Predict for the next 30 days
@@ -117,9 +149,21 @@ class ComputeDailyPrediction implements ShouldQueue
             ->where('date', '>=', $today->format('Y-m-d'))
             ->delete();
 
-        // Insert new predictions
-        Prediction::insert($predictions);
+        // Insert new predictions in chunks to avoid memory issues
+        $chunks = array_chunk($predictions, 100);
+        foreach ($chunks as $chunk) {
+            Prediction::insert($chunk);
+        }
 
         return count($predictions);
+    }
+
+    public function failed(\Exception $exception)
+    {
+        Log::error('ComputeDailyPrediction job permanently failed', [
+            'corporation_id' => $this->corporationId,
+            'error' => $exception->getMessage(),
+            'attempts' => $this->attempts()
+        ]);
     }
 }
