@@ -2,6 +2,7 @@
 namespace Seat\CorpWalletManager\Models;
 
 use Illuminate\Database\Eloquent\Model;
+use Illuminate\Support\Facades\Log;
 
 class DivisionBalance extends Model
 {
@@ -25,7 +26,16 @@ class DivisionBalance extends Model
      */
     public function corporation()
     {
-        return $this->belongsTo(\Seat\Eveapi\Models\Corporation\CorporationInfo::class, 'corporation_id', 'corporation_id');
+        try {
+            return $this->belongsTo(\Seat\Eveapi\Models\Corporation\CorporationInfo::class, 'corporation_id', 'corporation_id');
+        } catch (\Exception $e) {
+            Log::warning('DivisionBalance: Corporation relationship error', [
+                'balance_id' => $this->id,
+                'corporation_id' => $this->corporation_id,
+                'error' => $e->getMessage()
+            ]);
+            return null;
+        }
     }
     
     /**
@@ -33,6 +43,9 @@ class DivisionBalance extends Model
      */
     public function scopeForCorporation($query, $corporationId)
     {
+        if (!is_numeric($corporationId)) {
+            return $query->whereRaw('1 = 0');
+        }
         return $query->where('corporation_id', $corporationId);
     }
     
@@ -41,6 +54,9 @@ class DivisionBalance extends Model
      */
     public function scopeForDivision($query, $divisionId)
     {
+        if (!is_numeric($divisionId)) {
+            return $query->whereRaw('1 = 0');
+        }
         return $query->where('division_id', $divisionId);
     }
     
@@ -49,6 +65,9 @@ class DivisionBalance extends Model
      */
     public function scopeForMonth($query, $month)
     {
+        if (!preg_match('/^\d{4}-\d{2}$/', $month)) {
+            return $query->whereRaw('1 = 0');
+        }
         return $query->where('month', $month);
     }
     
