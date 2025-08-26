@@ -1,0 +1,19 @@
+{
+  "name": "mattfalahe/corp-wallet-manager",
+  "description": "CorpWallet Manager - SeAT plugin for corporation wallet management with monthly summaries, predictions, and division tracking.",
+  "type": "seat-plugin",
+  "license": "GPL-2.0",
+  "autoload": {
+    "psr-4": {
+      "Seat\\CorpWalletManager\\": "src/"
+    }
+  },
+    "extra": {
+    "seat-plugin": {
+      "provider": "Seat\\CorpWalletManager\\CorpWalletManagerServiceProvider"
+    }
+  },
+  "require": {
+    "eveseat/seat": "^5.0"
+  }
+}
