@@ -1,8 +1,8 @@
 <?php
-// Updated Settings.php
 namespace Seat\CorpWalletManager\Models;
 
 use Illuminate\Database\Eloquent\Model;
+use Illuminate\Support\Facades\Log;
 
 class Settings extends Model
 {
@@ -18,8 +18,20 @@ class Settings extends Model
      */
     public static function getSetting($key, $default = null)
     {
-        $setting = static::where('key', $key)->first();
-        return $setting ? $setting->value : $default;
+        try {
+            if (!is_string($key) || empty($key)) {
+                return $default;
+            }
+            
+            $setting = static::where('key', $key)->first();
+            return $setting ? $setting->value : $default;
+        } catch (\Exception $e) {
+            Log::warning('Settings: Failed to get setting', [
+                'key' => $key,
+                'error' => $e->getMessage()
+            ]);
+            return $default;
+        }
     }
     
     /**
@@ -27,10 +39,23 @@ class Settings extends Model
      */
     public static function setSetting($key, $value)
     {
-        return static::updateOrCreate(
-            ['key' => $key],
-            ['value' => $value]
-        );
+        try {
+            if (!is_string($key) || empty($key)) {
+                throw new \InvalidArgumentException('Setting key must be a non-empty string');
+            }
+            
+            return static::updateOrCreate(
+                ['key' => $key],
+                ['value' => (string)$value]
+            );
+        } catch (\Exception $e) {
+            Log::error('Settings: Failed to set setting', [
+                'key' => $key,
+                'value' => $value,
+                'error' => $e->getMessage()
+            ]);
+            throw $e;
+        }
     }
     
     /**
@@ -38,7 +63,32 @@ class Settings extends Model
      */
     public static function getBooleanSetting($key, $default = false)
     {
-        $value = static::getSetting($key, $default ? '1' : '0');
-        return in_array($value, ['1', 'true', 'on', 'yes'], true);
+        try {
+            $value = static::getSetting($key, $default ? '1' : '0');
+            return in_array(strtolower($value), ['1', 'true', 'on', 'yes'], true);
+        } catch (\Exception $e) {
+            Log::warning('Settings: Failed to get boolean setting', [
+                'key' => $key,
+                'error' => $e->getMessage()
+            ]);
+            return $default;
+        }
+    }
+    
+    /**
+     * Get integer setting value
+     */
+    public static function getIntegerSetting($key, $default = 0)
+    {
+        try {
+            $value = static::getSetting($key, $default);
+            return is_numeric($value) ? (int)$value : $default;
+        } catch (\Exception $e) {
+            Log::warning('Settings: Failed to get integer setting', [
+                'key' => $key,
+                'error' => $e->getMessage()
+            ]);
+            return $default;
+        }
     }
 }
