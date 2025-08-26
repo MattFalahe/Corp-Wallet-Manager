@@ -2,6 +2,7 @@
 namespace Seat\CorpWalletManager\Models;
 
 use Illuminate\Database\Eloquent\Model;
+use Illuminate\Support\Facades\Log;
 
 class RecalcLog extends Model
 {
@@ -34,7 +35,16 @@ class RecalcLog extends Model
      */
     public function corporation()
     {
-        return $this->belongsTo(\Seat\Eveapi\Models\Corporation\CorporationInfo::class, 'corporation_id', 'corporation_id');
+        try {
+            return $this->belongsTo(\Seat\Eveapi\Models\Corporation\CorporationInfo::class, 'corporation_id', 'corporation_id');
+        } catch (\Exception $e) {
+            Log::warning('RecalcLog: Corporation relationship error', [
+                'log_id' => $this->id,
+                'corporation_id' => $this->corporation_id,
+                'error' => $e->getMessage()
+            ]);
+            return null;
+        }
     }
     
     /**
@@ -42,6 +52,10 @@ class RecalcLog extends Model
      */
     public function scopeStatus($query, $status)
     {
+        $validStatuses = [self::STATUS_RUNNING, self::STATUS_COMPLETED, self::STATUS_FAILED];
+        if (!in_array($status, $validStatuses)) {
+            return $query->whereRaw('1 = 0');
+        }
         return $query->where('status', $status);
     }
     
@@ -50,6 +64,9 @@ class RecalcLog extends Model
      */
     public function scopeJobType($query, $jobType)
     {
+        if (!is_string($jobType) || empty($jobType)) {
+            return $query->whereRaw('1 = 0');
+        }
         return $query->where('job_type', $jobType);
     }
     
@@ -90,11 +107,15 @@ class RecalcLog extends Model
      */
     public function getDurationAttribute()
     {
-        if (!$this->completed_at) {
+        try {
+            if (!$this->completed_at || !$this->started_at) {
+                return null;
+            }
+            
+            return $this->started_at->diffInSeconds($this->completed_at);
+        } catch (\Exception $e) {
             return null;
         }
-        
-        return $this->started_at->diffInSeconds($this->completed_at);
     }
     
     /**
@@ -162,17 +183,13 @@ class RecalcLog extends Model
      */
     public function getJobTypeDisplayAttribute()
     {
-        switch ($this->job_type) {
-            case 'wallet_backfill':
-                return 'Wallet Backfill';
-            case 'daily_prediction':
-                return 'Daily Prediction';
-            case 'division_backfill':
-                return 'Division Backfill';
-            case 'division_prediction':
-                return 'Division Prediction';
-            default:
-                return ucwords(str_replace('_', ' ', $this->job_type));
-        }
+        $displayNames = [
+            'wallet_backfill' => 'Wallet Backfill',
+            'daily_prediction' => 'Daily Prediction',
+            'division_backfill' => 'Division Backfill',
+            'division_prediction' => 'Division Prediction',
+        ];
+        
+        return $displayNames[$this->job_type] ?? ucwords(str_replace('_', ' ', $this->job_type));
     }
 }
