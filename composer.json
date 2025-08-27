@@ -8,9 +8,11 @@
       "Seat\\CorpWalletManager\\": "src/"
     }
   },
-    "extra": {
-    "seat-plugin": {
-      "provider": "Seat\\CorpWalletManager\\CorpWalletManagerServiceProvider"
+  "extra": {
+    "laravel": {
+      "providers": [
+        "Seat\\CorpWalletManager\\CorpWalletManagerServiceProvider"
+      ]
     }
   },
   "require": {
