@@ -12,8 +12,8 @@ return new class extends Migration {
             $table->text('value');
             $table->timestamps();
             
-            // Index for performance
-            $table->index('key');
+            // Index with shorter name
+            $table->index('key', 'cwm_settings_key_idx');
         });
     }
 
