@@ -17,10 +17,10 @@ return new class extends Migration {
             $table->integer('records_processed')->default(0);
             $table->timestamps();
             
-            // Indexes for performance
-            $table->index(['job_type', 'corporation_id', 'status']);
-            $table->index(['status', 'started_at']);
-            $table->index('corporation_id');
+            // Indexes with shorter names
+            $table->index(['job_type', 'corporation_id', 'status'], 'cwm_logs_job_corp_status_idx');
+            $table->index(['status', 'started_at'], 'cwm_logs_status_started_idx');
+            $table->index('corporation_id', 'cwm_logs_corp_idx');
         });
     }
 
