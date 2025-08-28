@@ -6,6 +6,38 @@ use Illuminate\Support\Facades\Log;
 
 class CorpWalletManagerServiceProvider extends AbstractSeatPlugin
 {
+    /**
+     * Get the plugin name
+     */
+    public function getName(): string
+    {
+        return 'CorpWallet Manager';
+    }
+
+    /**
+     * Get the plugin repository URL
+     */
+    public function getPackageRepositoryUrl(): string
+    {
+        return 'https://github.com/MattFalahe/Corp-Wallet-Manager';
+    }
+
+    /**
+     * Get the packagist package name
+     */
+    public function getPackagistPackageName(): string
+    {
+        return 'mattfalahe/corp-wallet-manager';
+    }
+
+    /**
+     * Get the packagist vendor name
+     */
+    public function getPackagistVendorName(): string
+    {
+        return 'mattfalahe';
+    }
+
     public function bootPlugin()
     {
         try {
@@ -28,7 +60,6 @@ class CorpWalletManagerServiceProvider extends AbstractSeatPlugin
             Log::error('CorpWalletManager plugin boot error: ' . $e->getMessage(), [
                 'trace' => $e->getTraceAsString()
             ]);
-            // Don't re-throw - we don't want to break the entire application
         }
     }
 
