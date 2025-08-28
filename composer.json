@@ -1,0 +1,17 @@
+{
+  "name": "mattfalahe/corp-wallet-manager",
+  "description": "CorpWallet Manager - SeAT plugin",
+  "type": "seat-plugin",
+  "autoload": {
+    "psr-4": {
+      "Seat\\CorpWalletManager\\": "src/"
+    }
+  },
+  "extra": {
+    "laravel": {
+      "providers": [
+        "Seat\\CorpWalletManager\\CorpWalletManagerServiceProvider"
+      ]
+    }
+  }
+}
