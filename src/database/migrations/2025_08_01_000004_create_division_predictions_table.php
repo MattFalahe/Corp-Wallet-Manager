@@ -14,10 +14,10 @@ return new class extends Migration {
             $table->decimal('predicted_balance', 20, 2);
             $table->timestamps();
             
-            // Indexes for performance
-            $table->index(['corporation_id', 'division_id', 'date']);
-            $table->unique(['corporation_id', 'division_id', 'date']);
-            $table->index(['corporation_id', 'date']);
+            // Indexes with shorter names
+            $table->index(['corporation_id', 'division_id', 'date'], 'cwm_div_pred_corp_div_date_idx');
+            $table->unique(['corporation_id', 'division_id', 'date'], 'cwm_div_pred_corp_div_date_unq');
+            $table->index(['corporation_id', 'date'], 'cwm_div_pred_corp_date_idx');
         });
     }
 
