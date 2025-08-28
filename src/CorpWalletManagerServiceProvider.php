@@ -7,6 +7,8 @@ class CorpWalletManagerServiceProvider extends AbstractSeatPlugin
 {
     public function boot()
     {
+        file_put_contents('/tmp/corpwallet-debug.log', 'boot() called at ' . date('Y-m-d H:i:s') . "\n", FILE_APPEND);
+        
         $this->add_routes();
         $this->add_views();
         $this->add_translations();
@@ -17,9 +19,7 @@ class CorpWalletManagerServiceProvider extends AbstractSeatPlugin
     {
         $this->mergeConfigFrom(__DIR__.'/Config/corpwalletmanager.php', 'corpwalletmanager');
         
-        // Register corporation menu
-        $this->mergeConfigFrom(__DIR__ . '/Config/Menu/corporation.php', 'package.corporation.menu');
-        
+        // Register commands
         $this->commands([
             \Seat\CorpWalletManager\Console\Commands\BackfillWalletDataCommand::class,
         ]);
