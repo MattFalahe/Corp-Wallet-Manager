@@ -3,7 +3,7 @@ use Illuminate\Support\Facades\Route;
 
 Route::group([
     'namespace' => 'Seat\CorpWalletManager\Http\Controllers',
-    'middleware' => ['auth'], // Removed 'web' middleware as it doesn't exist in SeAT
+    'middleware' => ['web', 'auth', 'locale'],
     'prefix' => 'corp-wallet-manager',
 ], function () {
     
