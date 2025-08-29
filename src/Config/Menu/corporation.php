@@ -4,7 +4,7 @@ return [
     [
         'name' => 'corp-wallet-director',
         'label' => 'Corp Wallet (Director)',
-        'permission' => 'corporation.wallet.view',
+        'permission' => 'corporation.wallet_view', // Changed from corporation.wallet.view
         'highlight_view' => 'corp-wallet-manager',
         'route' => 'corpwalletmanager.director',
         'icon' => 'fas fa-line-chart',
@@ -12,7 +12,7 @@ return [
     [
         'name' => 'corp-wallet-member', 
         'label' => 'Corp Wallet (Member)',
-        'permission' => 'corporation.member.view',
+        'permission' => 'corporation.member_view', // Changed from corporation.member.view
         'highlight_view' => 'corp-wallet-manager',
         'route' => 'corpwalletmanager.member',
         'icon' => 'fas fa-area-chart',
@@ -20,7 +20,7 @@ return [
     [
         'name' => 'corp-wallet-settings',
         'label' => 'Corp Wallet Settings',
-        'permission' => 'corporation.wallet.view',
+        'permission' => 'corporation.wallet_view', // Changed from corporation.wallet.view
         'highlight_view' => 'corp-wallet-manager',
         'route' => 'corpwalletmanager.settings',
         'icon' => 'fas fa-cog',
