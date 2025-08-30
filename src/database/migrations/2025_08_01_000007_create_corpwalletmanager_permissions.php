@@ -14,9 +14,7 @@ return new class extends Migration {
         foreach ($permissions as $permission) {
             if (!DB::table('permissions')->where('title', $permission)->exists()) {
                 DB::table('permissions')->insert([
-                    'title' => $permission,
-                    'created_at' => now(),
-                    'updated_at' => now(),
+                    'title' => $permission
                 ]);
             }
         }
