@@ -22,6 +22,9 @@ class CorpWalletManagerServiceProvider extends AbstractSeatPlugin
         
         // CRITICAL: Register corporation menu items with SeAT
         $this->mergeConfigFrom(__DIR__ . '/Config/Menu/corporation.php', 'package.corporation.menu');
+
+        // Register permissions
+        $this->registerPermissions(__DIR__ . '/Config/Permissions/corporation.permissions.php', 'corporation');
                
         // Register commands
         $this->commands([
