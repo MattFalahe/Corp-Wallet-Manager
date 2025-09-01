@@ -7,8 +7,6 @@ class CorpWalletManagerServiceProvider extends AbstractSeatPlugin
 {
     public function boot()
     {
-        // Remove debug code - it was causing issues
-        
         $this->add_routes();
         $this->add_views();
         $this->add_translations();
@@ -20,11 +18,14 @@ class CorpWalletManagerServiceProvider extends AbstractSeatPlugin
         // Register package configuration
         $this->mergeConfigFrom(__DIR__.'/Config/corpwalletmanager.php', 'corpwalletmanager');
         
-        // CRITICAL: Register corporation menu items with SeAT
-        $this->mergeConfigFrom(__DIR__ . '/Config/Menu/corporation.php', 'package.corporation.menu');
+        // IMPORTANT: Register sidebar menu instead of corporation menu
+        $this->mergeConfigFrom(__DIR__ . '/Config/Menu/package.sidebar.php', 'package.sidebar');
+        
+        // Don't register corporation menu anymore - comment out or remove
+        // $this->mergeConfigFrom(__DIR__ . '/Config/Menu/corporation.php', 'package.corporation.menu');
 
-        // Register permissions
-        $this->registerPermissions(__DIR__ . '/Config/Permissions/corporation.permissions.php', 'corporation');
+        // Register permissions as 'other' type for separate section
+        $this->registerPermissions(__DIR__ . '/Config/Permissions/corpwalletmanager.permissions.php', 'other');
                
         // Register commands
         $this->commands([
