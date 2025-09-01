@@ -22,7 +22,7 @@ class CorpWalletManagerServiceProvider extends AbstractSeatPlugin
         $this->mergeConfigFrom(__DIR__.'/Config/corpwalletmanager.php', 'corpwalletmanager');
         
         // CRITICAL: Register sidebar menu
-        $this->mergeConfigFrom(__DIR__ . '/Config/Menu/package.sidebar.php', 'package.sidebar');
+        $this->mergeConfigFrom(__DIR__ . '/Config/corpwalletmanager.sidebar.php', 'package.sidebar');
 
         // Register permissions configuration (for SeAT's permission system)
         $this->registerPermissions(__DIR__ . '/Config/Permissions/corpwalletmanager.permissions.php', 'other');
