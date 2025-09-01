@@ -1,10 +1,15 @@
 <?php
 
 return [
-    'wallet_view_label' => 'View Corporation Wallet (Director)',
-    'wallet_view_description' => 'Allows viewing detailed corporation wallet information and predictions',
-    'member_view_label' => 'View Corporation Wallet (Member)',
-    'member_view_description' => 'Allows viewing basic corporation wallet information',
-    'wallet_settings_label' => 'Manage Corporation Wallet Settings',
-    'wallet_settings_description' => 'Allows managing corporation wallet settings and running maintenance jobs',
+    'view_label' => 'View Corp Wallet Manager',
+    'view_description' => 'Allows basic access to Corp Wallet Manager plugin',
+    
+    'director_view_label' => 'Director View',
+    'director_view_description' => 'Access to detailed corporation wallet information, predictions, and analytics',
+    
+    'member_view_label' => 'Member View',
+    'member_view_description' => 'Access to basic corporation wallet overview and trends',
+    
+    'settings_label' => 'Manage Settings',
+    'settings_description' => 'Manage Corp Wallet Manager settings and run maintenance jobs',
 ];
