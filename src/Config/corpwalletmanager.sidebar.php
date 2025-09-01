@@ -1,4 +1,5 @@
 <?php
+
 return [
     'corpwalletmanager' => [
         'name'          => 'Corp Wallet Manager',
