@@ -11,6 +11,9 @@ class CorpWalletManagerServiceProvider extends AbstractSeatPlugin
         $this->add_views();
         $this->add_translations();
         $this->add_migrations();
+        
+        // Ensure permissions exist after migrations run
+        $this->addPermissionsToDatabase();
     }
 
     public function register()
@@ -18,19 +21,47 @@ class CorpWalletManagerServiceProvider extends AbstractSeatPlugin
         // Register package configuration
         $this->mergeConfigFrom(__DIR__.'/Config/corpwalletmanager.php', 'corpwalletmanager');
         
-        // IMPORTANT: Register sidebar menu instead of corporation menu
+        // CRITICAL: Register sidebar menu
         $this->mergeConfigFrom(__DIR__ . '/Config/Menu/package.sidebar.php', 'package.sidebar');
-        
-        // Don't register corporation menu anymore - comment out or remove
-        // $this->mergeConfigFrom(__DIR__ . '/Config/Menu/corporation.php', 'package.corporation.menu');
 
-        // Register permissions as 'other' type for separate section
+        // Register permissions configuration (for SeAT's permission system)
         $this->registerPermissions(__DIR__ . '/Config/Permissions/corpwalletmanager.permissions.php', 'other');
                
         // Register commands
         $this->commands([
             \Seat\CorpWalletManager\Console\Commands\BackfillWalletDataCommand::class,
+            \Seat\CorpWalletManager\Console\Commands\SetupPermissionsCommand::class,
         ]);
+    }
+
+    /**
+     * Ensure permissions exist in database
+     * This handles cases where migrations might not have run
+     */
+    private function addPermissionsToDatabase()
+    {
+        // Only run this if we're not in console (to avoid issues during migrations)
+        if (app()->runningInConsole()) {
+            return;
+        }
+
+        try {
+            $permissions = [
+                'corpwalletmanager.view',
+                'corpwalletmanager.director_view',
+                'corpwalletmanager.member_view',
+                'corpwalletmanager.settings',
+            ];
+
+            foreach ($permissions as $permission) {
+                \Seat\Web\Models\Acl\Permission::firstOrCreate([
+                    'title' => $permission
+                ]);
+            }
+        } catch (\Exception $e) {
+            // Silently fail if database is not ready
+            // This can happen during initial setup
+        }
     }
 
     private function add_routes()
