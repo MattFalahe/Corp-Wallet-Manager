@@ -11,307 +11,270 @@
             </div>
         @endif
 
+        <div class="row mb-3">
+            <div class="col-md-4">
+                <div class="info-box">
+                    <span class="info-box-icon bg-blue"><i class="fas fa-wallet"></i></span>
+                    <div class="info-box-content">
+                        <span class="info-box-text">Current Balance</span>
+                        <span class="info-box-number" id="current-balance">Loading...</span>
+                    </div>
+                </div>
+            </div>
+            <div class="col-md-4">
+                <div class="info-box">
+                    <span class="info-box-icon bg-green"><i class="fas fa-chart-line"></i></span>
+                    <div class="info-box-content">
+                        <span class="info-box-text">Predicted Balance</span>
+                        <span class="info-box-number" id="predicted-balance">Loading...</span>
+                    </div>
+                </div>
+            </div>
+            <div class="col-md-4">
+                <div class="info-box">
+                    <span class="info-box-icon bg-yellow"><i class="fas fa-percent"></i></span>
+                    <div class="info-box-content">
+                        <span class="info-box-text">Monthly Change</span>
+                        <span class="info-box-number" id="monthly-change">Loading...</span>
+                    </div>
+                </div>
+            </div>
+        </div>
+
         <div class="card mb-3">
             <div class="card-header">
-                <h3 class="card-title">Live Wallet Balance</h3>
+                <h3 class="card-title">Monthly Balance Trend</h3>
                 <div class="card-tools">
-                    <span id="connection-status" class="badge badge-secondary">Connecting...</span>
+                    <button type="button" class="btn btn-tool" onclick="refreshData()">
+                        <i class="fas fa-sync-alt"></i> Refresh
+                    </button>
                 </div>
             </div>
             <div class="card-body">
-                <canvas id="walletChart" height="100"></canvas>
-                <div id="chart-error" class="alert alert-warning" style="display: none;">
-                    <i class="fa fa-exclamation-triangle"></i> Unable to load chart data. Please check your connection.
-                </div>
+                <canvas id="monthlyChart" height="100"></canvas>
             </div>
         </div>
 
         <div class="card">
             <div class="card-header">
-                <h3 class="card-title">Last 6 Months Comparison</h3>
+                <h3 class="card-title">30-Day Prediction</h3>
             </div>
             <div class="card-body">
-                <canvas id="monthlyChart" height="100"></canvas>
-                <div id="monthly-chart-error" class="alert alert-warning" style="display: none;">
-                    <i class="fa fa-exclamation-triangle"></i> Unable to load monthly data. Please check your connection.
-                </div>
+                <canvas id="predictionChart" height="100"></canvas>
             </div>
         </div>
     </div>
 </div>
 @endsection
 
-@push('head')
+@push('javascript')
 <script src="https://cdn.jsdelivr.net/npm/chart.js@3.9.1/dist/chart.min.js"></script>
-<script src="https://cdn.jsdelivr.net/npm/chartjs-adapter-date-fns@2.0.0/dist/chartjs-adapter-date-fns.bundle.min.js"></script>
-<script src="https://cdn.jsdelivr.net/npm/chartjs-plugin-streaming@2.0.0/dist/chartjs-plugin-streaming.min.js"></script>
-@endpush
-
-@section('scripts')
 <script>
-// Configuration from Laravel with fallbacks
+// Configuration
 const config = {
-    refreshInterval: {{ config('corpwalletmanager.refresh_interval', 60000) }},
     decimals: {{ config('corpwalletmanager.decimals', 2) }},
     colorActual: "{{ config('corpwalletmanager.color_actual', '#4cafef') }}",
     colorPredicted: "{{ config('corpwalletmanager.color_predicted', '#ef4444') }}"
 };
 
-// Helper function to format ISK values safely
+// Global chart variables
+let monthlyChart = null;
+let predictionChart = null;
+
+// Helper function to format ISK values
 function formatISK(value) {
-    try {
-        if (!isFinite(value) || isNaN(value)) {
-            return '0.00 ISK';
-        }
-        return new Intl.NumberFormat('en-US', {
-            style: 'decimal',
-            minimumFractionDigits: config.decimals,
-            maximumFractionDigits: config.decimals
-        }).format(value) + ' ISK';
-    } catch (e) {
-        return value + ' ISK';
+    if (!isFinite(value) || isNaN(value)) {
+        return '0.00 ISK';
     }
+    return new Intl.NumberFormat('en-US', {
+        style: 'decimal',
+        minimumFractionDigits: config.decimals,
+        maximumFractionDigits: config.decimals
+    }).format(value) + ' ISK';
 }
 
-// Connection status tracking
-let connectionRetries = 0;
-const maxRetries = 5;
+// Load current balance data
+function loadBalanceData() {
+    fetch('{{ route("corpwalletmanager.latest") }}')
+        .then(response => response.json())
+        .then(data => {
+            document.getElementById('current-balance').textContent = formatISK(data.balance);
+            document.getElementById('predicted-balance').textContent = formatISK(data.predicted);
+        })
+        .catch(error => {
+            console.error('Error loading balance:', error);
+            document.getElementById('current-balance').textContent = 'Error';
+            document.getElementById('predicted-balance').textContent = 'Error';
+        });
 
-function updateConnectionStatus(status) {
-    const statusEl = document.getElementById('connection-status');
-    switch (status) {
-        case 'connected':
-            statusEl.className = 'badge badge-success';
-            statusEl.textContent = 'Connected';
-            connectionRetries = 0;
-            break;
-        case 'connecting':
-            statusEl.className = 'badge badge-warning';
-            statusEl.textContent = 'Connecting...';
-            break;
-        case 'error':
-            statusEl.className = 'badge badge-danger';
-            statusEl.textContent = 'Connection Error';
-            break;
-    }
-}
-
-// Progressive Live Chart with error handling
-const ctxWallet = document.getElementById('walletChart');
-let walletChart;
-
-try {
-    walletChart = new Chart(ctxWallet, {
-        type: 'line',
-        data: { 
-            datasets: [
-                { 
-                    label: 'Actual Balance', 
-                    borderColor: config.colorActual, 
-                    backgroundColor: 'rgba(0,0,0,0)', 
-                    data: [],
-                    tension: 0.1
-                },
-                { 
-                    label: 'Predicted Balance', 
-                    borderColor: config.colorPredicted, 
-                    borderDash: [5,5], 
-                    backgroundColor: 'rgba(0,0,0,0)', 
-                    data: [],
-                    tension: 0.1
-                }
-            ]
-        },
-        options: {
-            responsive: true,
-            maintainAspectRatio: false,
-            plugins: { 
-                streaming: {
-                    duration: 24*60*60*1000, // 24 hours
-                    refresh: config.refreshInterval,
-                    delay: 2000,
-                    onRefresh: function(chart) {
-                        updateConnectionStatus('connecting');
-                        
-                        fetch('{{ route("corpwalletmanager.latest") }}', {
-                            method: 'GET',
-                            headers: {
-                                'Accept': 'application/json',
-                                'X-Requested-With': 'XMLHttpRequest'
-                            }
-                        })
-                        .then(response => {
-                            if (!response.ok) {
-                                throw new Error(`HTTP ${response.status}: ${response.statusText}`);
-                            }
-                            return response.json();
-                        })
-                        .then(data => {
-                            if (data.error) {
-                                throw new Error(data.error);
-                            }
-                            
-                            const now = Date.now();
-                            const balance = parseFloat(data.balance) || 0;
-                            const predicted = parseFloat(data.predicted) || 0;
-                            
-                            chart.data.datasets[0].data.push({
-                                x: now, 
-                                y: parseFloat(balance.toFixed(config.decimals))
-                            });
-                            chart.data.datasets[1].data.push({
-                                x: now, 
-                                y: parseFloat(predicted.toFixed(config.decimals))
-                            });
-                            
-                            updateConnectionStatus('connected');
-                            document.getElementById('chart-error').style.display = 'none';
-                        })
-                        .catch(error => {
-                            console.error('Chart data fetch error:', error);
-                            updateConnectionStatus('error');
-                            connectionRetries++;
-                            
-                            if (connectionRetries >= maxRetries) {
-                                document.getElementById('chart-error').style.display = 'block';
-                            }
-                        });
-                    }
-                },
-                legend: {
-                    display: true,
-                    position: 'top'
-                }
-            },
-            scales: {
-                x: { 
-                    type: 'realtime', 
-                    realtime: {
-                        duration: 24*60*60*1000, 
-                        refresh: config.refreshInterval, 
-                        delay: 2000
-                    }, 
-                    title: {
-                        display: true,
-                        text: 'Time'
-                    } 
-                },
-                y: { 
-                    title: {
-                        display: true,
-                        text: 'Balance (ISK)'
-                    },
-                    ticks: {
-                        callback: function(value) {
-                            try {
-                                return new Intl.NumberFormat().format(value);
-                            } catch (e) {
-                                return value;
-                            }
-                        }
-                    }
-                }
+    // Load summary data for monthly change
+    fetch('{{ route("corpwalletmanager.summary") }}')
+        .then(response => response.json())
+        .then(data => {
+            const changePercent = data.change.percent;
+            const changeEl = document.getElementById('monthly-change');
+            changeEl.textContent = changePercent.toFixed(2) + '%';
+            
+            // Color based on positive/negative
+            if (changePercent >= 0) {
+                changeEl.classList.remove('text-danger');
+                changeEl.classList.add('text-success');
+            } else {
+                changeEl.classList.remove('text-success');
+                changeEl.classList.add('text-danger');
             }
-        }
-    });
-} catch (error) {
-    console.error('Failed to initialize wallet chart:', error);
-    document.getElementById('chart-error').style.display = 'block';
+        })
+        .catch(error => {
+            console.error('Error loading summary:', error);
+            document.getElementById('monthly-change').textContent = 'Error';
+        });
 }
 
-// 6-Month Comparison Chart with error handling
-const ctxMonthly = document.getElementById('monthlyChart');
-let monthlyChart;
-
-fetch('{{ route("corpwalletmanager.monthly") }}', {
-    method: 'GET',
-    headers: {
-        'Accept': 'application/json',
-        'X-Requested-With': 'XMLHttpRequest'
-    }
-})
-.then(response => {
-    if (!response.ok) {
-        throw new Error(`HTTP ${response.status}: ${response.statusText}`);
-    }
-    return response.json();
-})
-.then(data => {
-    if (data.error) {
-        throw new Error(data.error);
-    }
-    
-    try {
-        monthlyChart = new Chart(ctxMonthly, {
-            type: 'bar',
-            data: {
-                labels: data.labels || [],
-                datasets: [{
-                    label: 'Net Balance',
-                    data: (data.data || []).map(v => parseFloat(v) || 0),
-                    backgroundColor: (data.data || []).map(v => 
-                        (parseFloat(v) || 0) >= 0 ? config.colorActual : config.colorPredicted
-                    )
-                }]
-            },
-            options: {
-                responsive: true,
-                maintainAspectRatio: false,
-                scales: {
-                    y: {
-                        title: {
-                            display: true,
-                            text: 'Balance (ISK)'
+// Load monthly comparison chart
+function loadMonthlyChart() {
+    fetch('{{ route("corpwalletmanager.monthly") }}?months=6')
+        .then(response => response.json())
+        .then(data => {
+            const ctx = document.getElementById('monthlyChart').getContext('2d');
+            
+            if (monthlyChart) {
+                monthlyChart.destroy();
+            }
+            
+            monthlyChart = new Chart(ctx, {
+                type: 'bar',
+                data: {
+                    labels: data.labels,
+                    datasets: [{
+                        label: 'Monthly Balance',
+                        data: data.data,
+                        backgroundColor: data.data.map(value => 
+                            value >= 0 ? config.colorActual : config.colorPredicted
+                        ),
+                        borderColor: data.data.map(value => 
+                            value >= 0 ? config.colorActual : config.colorPredicted
+                        ),
+                        borderWidth: 1
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    plugins: {
+                        legend: {
+                            display: false
                         },
-                        ticks: {
-                            callback: function(value) {
-                                try {
-                                    return new Intl.NumberFormat().format(value);
-                                } catch (e) {
-                                    return value;
+                        tooltip: {
+                            callbacks: {
+                                label: function(context) {
+                                    return 'Balance: ' + formatISK(context.parsed.y);
                                 }
                             }
                         }
                     },
-                    x: {
-                        title: {
-                            display: true,
-                            text: 'Month'
+                    scales: {
+                        y: {
+                            beginAtZero: true,
+                            ticks: {
+                                callback: function(value) {
+                                    return new Intl.NumberFormat('en-US', {
+                                        notation: 'compact',
+                                        maximumFractionDigits: 1
+                                    }).format(value);
+                                }
+                            }
                         }
                     }
+                }
+            });
+        })
+        .catch(error => {
+            console.error('Error loading monthly chart:', error);
+        });
+}
+
+// Load prediction chart
+function loadPredictionChart() {
+    fetch('{{ route("corpwalletmanager.predictions") }}?days=30')
+        .then(response => response.json())
+        .then(data => {
+            const ctx = document.getElementById('predictionChart').getContext('2d');
+            
+            if (predictionChart) {
+                predictionChart.destroy();
+            }
+            
+            // If no prediction data, show a message
+            if (!data.data || data.data.length === 0) {
+                ctx.font = '20px Arial';
+                ctx.textAlign = 'center';
+                ctx.fillText('No prediction data available', ctx.canvas.width / 2, ctx.canvas.height / 2);
+                return;
+            }
+            
+            predictionChart = new Chart(ctx, {
+                type: 'line',
+                data: {
+                    labels: data.labels,
+                    datasets: [{
+                        label: 'Predicted Balance',
+                        data: data.data,
+                        borderColor: config.colorPredicted,
+                        backgroundColor: config.colorPredicted + '20',
+                        borderDash: [5, 5],
+                        tension: 0.4,
+                        fill: true
+                    }]
                 },
-                plugins: {
-                    tooltip: {
-                        callbacks: {
-                            label: function(context) {
-                                return context.dataset.label + ': ' + formatISK(context.parsed.y);
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    plugins: {
+                        legend: {
+                            display: false
+                        },
+                        tooltip: {
+                            callbacks: {
+                                label: function(context) {
+                                    return 'Predicted: ' + formatISK(context.parsed.y);
+                                }
                             }
                         }
                     },
-                    legend: {
-                        display: false
+                    scales: {
+                        y: {
+                            ticks: {
+                                callback: function(value) {
+                                    return new Intl.NumberFormat('en-US', {
+                                        notation: 'compact',
+                                        maximumFractionDigits: 1
+                                    }).format(value);
+                                }
+                            }
+                        }
                     }
                 }
-            }
+            });
+        })
+        .catch(error => {
+            console.error('Error loading prediction chart:', error);
         });
-    } catch (error) {
-        console.error('Failed to create monthly chart:', error);
-        document.getElementById('monthly-chart-error').style.display = 'block';
-    }
-})
-.catch(error => {
-    console.error('Monthly data fetch error:', error);
-    document.getElementById('monthly-chart-error').style.display = 'block';
-});
+}
 
-// Cleanup on page unload
-window.addEventListener('beforeunload', function() {
-    if (walletChart) {
-        walletChart.destroy();
-    }
-    if (monthlyChart) {
-        monthlyChart.destroy();
-    }
+// Refresh all data
+function refreshData() {
+    loadBalanceData();
+    loadMonthlyChart();
+    loadPredictionChart();
+}
+
+// Initialize on page load
+document.addEventListener('DOMContentLoaded', function() {
+    refreshData();
+    
+    // Auto-refresh every 60 seconds
+    setInterval(refreshData, 60000);
 });
 </script>
+@endpush
 @endsection
