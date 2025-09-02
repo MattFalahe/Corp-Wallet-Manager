@@ -80,6 +80,14 @@ const config = {
 let monthlyChart = null;
 let currentMonths = 6;
 
+// Helper function to build URLs that respect the current protocol
+function buildUrl(path) {
+    // Get the current base URL without protocol
+    const currentUrl = window.location;
+    const baseUrl = currentUrl.protocol + '//' + currentUrl.host;
+    return baseUrl + path;
+}
+
 // Format ISK values
 function formatISK(value) {
     if (!isFinite(value) || isNaN(value)) {
@@ -95,7 +103,7 @@ function formatISK(value) {
 // Load balance info
 function loadBalanceInfo() {
     // Load current balance
-    fetch('{{ route("corpwalletmanager.latest") }}')
+    fetch(buildUrl('/corp-wallet-manager/api/latest'))
         .then(response => response.json())
         .then(data => {
             document.getElementById('current-balance').textContent = formatISK(data.balance);
@@ -106,7 +114,7 @@ function loadBalanceInfo() {
         });
 
     // Load summary for change
-    fetch('{{ route("corpwalletmanager.summary") }}')
+    fetch(buildUrl('/corp-wallet-manager/api/summary'))
         .then(response => response.json())
         .then(data => {
             const change = data.change.absolute;
@@ -128,7 +136,8 @@ function loadBalanceInfo() {
 
 // Load monthly chart
 function loadMonthlyChart(months = 6) {
-    fetch(`{{ route("corpwalletmanager.monthly") }}?months=${months}`)
+    const url = buildUrl(`/corp-wallet-manager/api/monthly-comparison?months=${months}`);
+    fetch(url)
         .then(response => response.json())
         .then(data => {
             const ctx = document.getElementById('monthlyChart').getContext('2d');
@@ -140,10 +149,10 @@ function loadMonthlyChart(months = 6) {
             monthlyChart = new Chart(ctx, {
                 type: 'line',
                 data: {
-                    labels: data.labels,
+                    labels: data.labels || [],
                     datasets: [{
                         label: 'Monthly Balance',
-                        data: data.data,
+                        data: data.data || [],
                         borderColor: config.colorActual,
                         backgroundColor: config.colorActual + '20',
                         fill: true,
