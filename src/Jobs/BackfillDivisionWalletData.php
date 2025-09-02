@@ -45,15 +45,15 @@ class BackfillDivisionWalletData implements ShouldQueue
             $query = DB::table('corporation_wallet_journals')
                 ->selectRaw('
                     corporation_id,
-                    wallet_division as division_id,
+                    division as division_id,
                     DATE_FORMAT(date, "%Y-%m") as month, 
                     SUM(amount) as balance
                 ')
                 ->whereNotNull('corporation_id')
-                ->whereNotNull('wallet_division')
-                ->groupBy('corporation_id', 'wallet_division', 'month')
+                ->whereNotNull('division')
+                ->groupBy('corporation_id', 'division', 'month')
                 ->orderBy('corporation_id')
-                ->orderBy('wallet_division')
+                ->orderBy('division')
                 ->orderBy('month');
 
             if ($this->corporationId) {
