@@ -65,7 +65,7 @@
         </div>
     </div>
 </div>
-@endsection
+@stop
 
 @push('javascript')
 <script src="https://cdn.jsdelivr.net/npm/chart.js@3.9.1/dist/chart.min.js"></script>
@@ -277,4 +277,3 @@ document.addEventListener('DOMContentLoaded', function() {
 });
 </script>
 @endpush
-@endsection
