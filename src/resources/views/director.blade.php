@@ -120,42 +120,6 @@
             </div>
         </div>
 
-        <!-- Transaction Type Breakdown Row -->
-        <div class="row mt-3">
-            <div class="col-md-6">
-                <div class="card">
-                    <div class="card-header">
-                        <h3 class="card-title">Income Sources (This Month)</h3>
-                        <div class="card-tools">
-                            <button type="button" class="btn btn-tool" data-card-widget="collapse">
-                                <i class="fas fa-minus"></i>
-                            </button>
-                        </div>
-                    </div>
-                    <div class="card-body">
-                        <canvas id="incomeBreakdownChart" height="300"></canvas>
-                        <div id="income-legend" class="mt-3"></div>
-                    </div>
-                </div>
-            </div>
-            <div class="col-md-6">
-                <div class="card">
-                    <div class="card-header">
-                        <h3 class="card-title">Expense Categories (This Month)</h3>
-                        <div class="card-tools">
-                            <button type="button" class="btn btn-tool" data-card-widget="collapse">
-                                <i class="fas fa-minus"></i>
-                            </button>
-                        </div>
-                    </div>
-                    <div class="card-body">
-                        <canvas id="expenseBreakdownChart" height="300"></canvas>
-                        <div id="expense-legend" class="mt-3"></div>
-                    </div>
-                </div>
-            </div>
-        </div>
-
         <!-- Prediction Chart -->
         <div class="card mt-3">
             <div class="card-header">
@@ -190,8 +154,6 @@ const config = {
 let balanceChart = null;
 let incomeExpenseChart = null;
 let predictionChart = null;
-let incomeBreakdownChart = null;
-let expenseBreakdownChart = null;
 let currentChartMode = 'flow';
 
 // Helper function to build URLs
@@ -601,37 +563,17 @@ function loadExpenseBreakdown() {
                     datasets: [{
                         data: data.values || [],
                         backgroundColor: colors,
-                        borderWidth: 2,
+                        borderWidth: 1,
                         borderColor: '#fff'
                     }]
                 },
                 options: {
                     responsive: true,
-                    maintainAspectRatio: false,
+                    maintainAspectRatio: true,
+                    aspectRatio: 2,
                     plugins: {
                         legend: {
-                            position: 'bottom',
-                            labels: {
-                                padding: 15,
-                                generateLabels: function(chart) {
-                                    const data = chart.data;
-                                    if (data.labels.length && data.datasets.length) {
-                                        const dataset = data.datasets[0];
-                                        const total = dataset.data.reduce((a, b) => a + b, 0);
-                                        return data.labels.map((label, i) => {
-                                            const value = dataset.data[i];
-                                            const percentage = ((value / total) * 100).toFixed(1);
-                                            return {
-                                                text: `${label}: ${percentage}%`,
-                                                fillStyle: dataset.backgroundColor[i],
-                                                hidden: false,
-                                                index: i
-                                            };
-                                        });
-                                    }
-                                    return [];
-                                }
-                            }
+                            display: false // Hide legend to save space
                         },
                         tooltip: {
                             callbacks: {
