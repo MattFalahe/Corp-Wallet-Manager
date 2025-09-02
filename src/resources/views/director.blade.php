@@ -81,6 +81,14 @@ const config = {
 let monthlyChart = null;
 let predictionChart = null;
 
+// Helper function to build URLs that respect the current protocol
+function buildUrl(path) {
+    // Get the current base URL without protocol
+    const currentUrl = window.location;
+    const baseUrl = currentUrl.protocol + '//' + currentUrl.host;
+    return baseUrl + path;
+}
+
 // Helper function to format ISK values
 function formatISK(value) {
     if (!isFinite(value) || isNaN(value)) {
@@ -95,7 +103,7 @@ function formatISK(value) {
 
 // Load current balance data
 function loadBalanceData() {
-    fetch('{{ route("corpwalletmanager.latest") }}')
+    fetch(buildUrl('/corp-wallet-manager/api/latest'))
         .then(response => response.json())
         .then(data => {
             document.getElementById('current-balance').textContent = formatISK(data.balance);
@@ -108,7 +116,7 @@ function loadBalanceData() {
         });
 
     // Load summary data for monthly change
-    fetch('{{ route("corpwalletmanager.summary") }}')
+    fetch(buildUrl('/corp-wallet-manager/api/summary'))
         .then(response => response.json())
         .then(data => {
             const changePercent = data.change.percent;
@@ -132,7 +140,7 @@ function loadBalanceData() {
 
 // Load monthly comparison chart
 function loadMonthlyChart() {
-    fetch('{{ route("corpwalletmanager.monthly") }}?months=6')
+    fetch(buildUrl('/corp-wallet-manager/api/monthly-comparison?months=6'))
         .then(response => response.json())
         .then(data => {
             const ctx = document.getElementById('monthlyChart').getContext('2d');
@@ -144,14 +152,14 @@ function loadMonthlyChart() {
             monthlyChart = new Chart(ctx, {
                 type: 'bar',
                 data: {
-                    labels: data.labels,
+                    labels: data.labels || [],
                     datasets: [{
                         label: 'Monthly Balance',
-                        data: data.data,
-                        backgroundColor: data.data.map(value => 
+                        data: data.data || [],
+                        backgroundColor: (data.data || []).map(value => 
                             value >= 0 ? config.colorActual : config.colorPredicted
                         ),
-                        borderColor: data.data.map(value => 
+                        borderColor: (data.data || []).map(value => 
                             value >= 0 ? config.colorActual : config.colorPredicted
                         ),
                         borderWidth: 1
@@ -195,7 +203,7 @@ function loadMonthlyChart() {
 
 // Load prediction chart
 function loadPredictionChart() {
-    fetch('{{ route("corpwalletmanager.predictions") }}?days=30')
+    fetch(buildUrl('/corp-wallet-manager/api/predictions?days=30'))
         .then(response => response.json())
         .then(data => {
             const ctx = document.getElementById('predictionChart').getContext('2d');
@@ -215,10 +223,10 @@ function loadPredictionChart() {
             predictionChart = new Chart(ctx, {
                 type: 'line',
                 data: {
-                    labels: data.labels,
+                    labels: data.labels || [],
                     datasets: [{
                         label: 'Predicted Balance',
-                        data: data.data,
+                        data: data.data || [],
                         borderColor: config.colorPredicted,
                         backgroundColor: config.colorPredicted + '20',
                         borderDash: [5, 5],
