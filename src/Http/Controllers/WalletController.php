@@ -11,6 +11,8 @@ use Seat\CorpWalletManager\Models\MonthlyBalance;
 
 class WalletController extends Controller
 {
+    // ========== EXISTING METHODS ==========
+    
     public function director()
     {
         try {
@@ -337,42 +339,40 @@ class WalletController extends Controller
             ], 500);
         }
     }
-
-        /**
-     * Get actual wallet balance from corporation wallets
+    
+    // ========== NEW METHODS ==========
+    
+    /**
+     * Get actual wallet balance from corporation_wallet_balances table
      */
     public function walletActual(Request $request)
     {
         try {
             $corporationId = $request->get('corporation_id');
             
-            // Query the actual corporation wallet balances from SeAT's tables
-            $query = \DB::table('corporation_wallets')
-                ->selectRaw('SUM(balance) as total_balance');
-                
-            if ($corporationId && is_numeric($corporationId)) {
-                $query->where('corporation_id', $corporationId);
+            // If no corporation specified, get the first one we have
+            if (!$corporationId) {
+                $corporationId = \DB::table('corporation_wallet_balances')
+                    ->value('corporation_id');
             }
+            
+            // Use corporation_wallet_balances table which has the current balance
+            $query = \DB::table('corporation_wallet_balances')
+                ->selectRaw('SUM(balance) as total_balance')
+                ->where('corporation_id', $corporationId);
             
             $result = $query->first();
             $balance = $result ? (float)$result->total_balance : 0;
             
-            // If corporation_wallets doesn't exist, try corporation_wallet_balances
-            if ($balance == 0) {
-                $query = \DB::table('corporation_wallet_balances')
-                    ->selectRaw('SUM(balance) as total_balance');
-                    
-                if ($corporationId && is_numeric($corporationId)) {
-                    $query->where('corporation_id', $corporationId);
-                }
-                
-                $result = $query->first();
-                $balance = $result ? (float)$result->total_balance : 0;
-            }
+            // Also get division count for info
+            $divisionCount = \DB::table('corporation_wallet_balances')
+                ->where('corporation_id', $corporationId)
+                ->count();
             
             return response()->json([
                 'balance' => $balance,
                 'corporation_id' => $corporationId,
+                'divisions' => $divisionCount,
                 'timestamp' => now()->toIso8601String(),
             ]);
             
@@ -440,7 +440,7 @@ class WalletController extends Controller
             $corporationId = $request->get('corporation_id');
             if (!$corporationId || !is_numeric($corporationId)) {
                 // Get first available corporation
-                $corporationId = \DB::table('corporation_wallet_journals')
+                $corporationId = \DB::table('corporation_wallet_balances')
                     ->whereNotNull('corporation_id')
                     ->value('corporation_id');
             }
@@ -451,13 +451,13 @@ class WalletController extends Controller
             
             $currentMonth = Carbon::now()->format('Y-m');
             
-            // Get current division balances from SeAT
-            $walletBalances = \DB::table('corporation_wallets')
+            // Get current division balances from corporation_wallet_balances
+            $walletBalances = \DB::table('corporation_wallet_balances')
                 ->where('corporation_id', $corporationId)
                 ->get()
                 ->keyBy('division');
             
-            // Get monthly changes from our table
+            // Get monthly changes from our processed table
             $monthlyChanges = \Seat\CorpWalletManager\Models\DivisionBalance::where('corporation_id', $corporationId)
                 ->where('month', $currentMonth)
                 ->get()
@@ -466,14 +466,13 @@ class WalletController extends Controller
             $divisions = [];
             
             // Build division data
-            for ($i = 1; $i <= 7; $i++) {
-                $walletBalance = $walletBalances->get($i);
-                $monthChange = $monthlyChanges->get($i);
+            foreach ($walletBalances as $walletBalance) {
+                $monthChange = $monthlyChanges->get($walletBalance->division);
                 
                 $divisions[] = [
-                    'id' => $i,
-                    'name' => $this->getDivisionName($i),
-                    'balance' => $walletBalance ? (float)$walletBalance->balance : 0,
+                    'id' => $walletBalance->division,
+                    'name' => $this->getDivisionName($walletBalance->division),
+                    'balance' => (float)$walletBalance->balance,
                     'change' => $monthChange ? (float)$monthChange->balance : 0,
                 ];
             }
@@ -613,6 +612,7 @@ class WalletController extends Controller
             ], 500);
         }
     }
+
     /**
      * Get transaction breakdown by type (for pie charts)
      */
@@ -726,6 +726,8 @@ class WalletController extends Controller
         }
     }
 
+    // ========== HELPER METHODS ==========
+    
     /**
      * Helper function to get division names
      */
@@ -768,6 +770,8 @@ class WalletController extends Controller
             'cspa' => 'CSPA Charge',
             'cspaofflinerefund' => 'CSPA Refund',
             'daily_challenge_reward' => 'Daily Challenge',
+            'daily_goal_payouts' => 'Daily Goal Payouts',
+            'ess_escrow_transfer' => 'ESS Escrow Transfer',
             'copying' => 'Blueprint Copying',
             'industry_job_tax' => 'Industry Tax',
             'manufacturing' => 'Manufacturing',
