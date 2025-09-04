@@ -129,7 +129,7 @@
             </div>
         </div>
 
-        <!-- Pie Charts Row -->
+        <!-- Pie Charts Row - Side by Side -->
         <div class="row mt-3">
             <div class="col-md-6">
                 <div class="card">
@@ -177,7 +177,7 @@
             </div>
         </div>
 
-        <!-- Prediction Chart -->
+        <!-- Prediction Chart - Larger Height -->
         <div class="card mt-3">
             <div class="card-header">
                 <h3 class="card-title">30-Day Forecast</h3>
@@ -188,7 +188,7 @@
                 </div>
             </div>
             <div class="card-body">
-                <canvas id="predictionChart" height="100"></canvas>
+                <canvas id="predictionChart" height="150"></canvas>
             </div>
         </div>
     </div>
@@ -378,8 +378,8 @@ function loadDivisionBreakdown() {
 // Load balance history chart
 function loadBalanceChart(mode = 'flow') {
     const endpoint = mode === 'actual' 
-        ? '/corp-wallet-manager/api/balance-history?months=6' 
-        : '/corp-wallet-manager/api/monthly-comparison?months=6';
+        ? '/corp-wallet-manager/api/balance-history?months=12' 
+        : '/corp-wallet-manager/api/monthly-comparison?months=12';
     
     fetch(buildUrl(addCorpParam(endpoint)))
         .then(response => response.json())
@@ -433,9 +433,9 @@ function loadBalanceChart(mode = 'flow') {
         });
 }
 
-// Load income vs expense chart
+// Load income vs expense chart - Now as LINE chart
 function loadIncomeExpenseChart() {
-    fetch(buildUrl(addCorpParam('/corp-wallet-manager/api/income-expense?months=6')))
+    fetch(buildUrl(addCorpParam('/corp-wallet-manager/api/income-expense?months=12')))
         .then(response => response.json())
         .then(data => {
             const ctx = document.getElementById('incomeExpenseChart').getContext('2d');
@@ -445,31 +445,45 @@ function loadIncomeExpenseChart() {
             }
             
             incomeExpenseChart = new Chart(ctx, {
-                type: 'bar',
+                type: 'line',
                 data: {
                     labels: data.labels || [],
                     datasets: [
                         {
                             label: 'Income',
                             data: data.income || [],
-                            backgroundColor: config.colorIncome,
-                            borderColor: config.colorIncome,
-                            borderWidth: 1
+                            borderColor: '#10b981',
+                            backgroundColor: '#10b98120',
+                            borderWidth: 2,
+                            fill: true,
+                            tension: 0.4
                         },
                         {
                             label: 'Expenses',
                             data: data.expenses || [],
-                            backgroundColor: config.colorExpense,
-                            borderColor: config.colorExpense,
-                            borderWidth: 1
+                            borderColor: '#ef4444',
+                            backgroundColor: '#ef444420',
+                            borderWidth: 2,
+                            fill: true,
+                            tension: 0.4
                         }
                     ]
                 },
                 options: {
                     responsive: true,
                     maintainAspectRatio: false,
+                    interaction: {
+                        mode: 'index',
+                        intersect: false,
+                    },
                     plugins: {
-                        legend: { position: 'top' },
+                        legend: { 
+                            position: 'top',
+                            labels: {
+                                usePointStyle: true,
+                                padding: 20
+                            }
+                        },
                         tooltip: {
                             callbacks: {
                                 label: function(context) {
@@ -480,6 +494,7 @@ function loadIncomeExpenseChart() {
                     },
                     scales: {
                         y: {
+                            beginAtZero: true,
                             ticks: {
                                 callback: function(value) {
                                     return formatISK(value, true).replace(' ISK', '');
