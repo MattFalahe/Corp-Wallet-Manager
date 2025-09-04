@@ -99,12 +99,12 @@
             </div>
         </div>
 
-        <!-- Charts Row 1 -->
+        <!-- Balance History Chart - Full Width -->
         <div class="row">
-            <div class="col-md-6">
-                <div class="card">
+            <div class="col-12">
+                <div class="card mb-3">
                     <div class="card-header">
-                        <h3 class="card-title">Balance History</h3>
+                        <h3 class="card-title">Balance History (12 Months)</h3>
                         <div class="card-tools">
                             <div class="btn-group btn-group-sm">
                                 <button type="button" class="btn btn-outline-secondary" onclick="updateBalanceChart('actual')">Actual</button>
@@ -113,17 +113,21 @@
                         </div>
                     </div>
                     <div class="card-body">
-                        <canvas id="balanceChart" height="250"></canvas>
+                        <canvas id="balanceChart" height="120"></canvas>
                     </div>
                 </div>
             </div>
-            <div class="col-md-6">
-                <div class="card">
+        </div>
+
+        <!-- Income vs Expenses Chart - Full Width -->
+        <div class="row">
+            <div class="col-12">
+                <div class="card mb-3">
                     <div class="card-header">
-                        <h3 class="card-title">Income vs Expenses</h3>
+                        <h3 class="card-title">Income vs Expenses Trend (12 Months)</h3>
                     </div>
                     <div class="card-body">
-                        <canvas id="incomeExpenseChart" height="250"></canvas>
+                        <canvas id="incomeExpenseChart" height="120"></canvas>
                     </div>
                 </div>
             </div>
