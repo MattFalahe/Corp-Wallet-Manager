@@ -113,7 +113,7 @@
                         </div>
                     </div>
                     <div class="card-body">
-                        <canvas id="balanceChart" height="120"></canvas>
+                        <canvas id="balanceChart" height="400"></canvas>
                     </div>
                 </div>
             </div>
@@ -127,7 +127,7 @@
                         <h3 class="card-title">Income vs Expenses Trend (12 Months)</h3>
                     </div>
                     <div class="card-body">
-                        <canvas id="incomeExpenseChart" height="120"></canvas>
+                        <canvas id="incomeExpenseChart" height="400"></canvas>
                     </div>
                 </div>
             </div>
