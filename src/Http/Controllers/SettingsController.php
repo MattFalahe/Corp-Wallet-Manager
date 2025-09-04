@@ -4,6 +4,7 @@ namespace Seat\CorpWalletManager\Http\Controllers;
 use Illuminate\Routing\Controller;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Log;
+use Illuminate\Support\Facades\DB;
 use Seat\CorpWalletManager\Models\Settings;
 use Seat\CorpWalletManager\Models\RecalcLog;
 use Seat\CorpWalletManager\Jobs\BackfillWalletData;
@@ -24,14 +25,38 @@ class SettingsController extends Controller
             // Provide default values if not set
             $defaultSettings = [
                 'refresh_interval' => config('corpwalletmanager.refresh_interval', 60000),
+                'refresh_minutes' => '5', // New default
                 'color_actual' => config('corpwalletmanager.color_actual', '#4cafef'),
                 'color_predicted' => config('corpwalletmanager.color_predicted', '#ef4444'),
                 'decimals' => config('corpwalletmanager.decimals', 2),
                 'use_precomputed_predictions' => config('corpwalletmanager.use_precomputed_predictions', true),
                 'use_precomputed_monthly_balances' => config('corpwalletmanager.use_precomputed_monthly_balances', true),
+                'selected_corporation_id' => null, // New setting
             ];
             
             $settings = array_merge($defaultSettings, $settings);
+            
+            // Get available corporations from the database
+            $corporations = [];
+            try {
+                // Try to get corporations from SeAT's corporation_infos table
+                if (DB::getSchemaBuilder()->hasTable('corporation_infos')) {
+                    $corporations = DB::table('corporation_infos')
+                        ->select('corporation_id', 'name')
+                        ->orderBy('name')
+                        ->get();
+                } else {
+                    // Fallback: get from wallet data
+                    $corporations = DB::table('corporation_wallet_balances')
+                        ->distinct()
+                        ->selectRaw('corporation_id, corporation_id as name')
+                        ->whereNotNull('corporation_id')
+                        ->orderBy('corporation_id')
+                        ->get();
+                }
+            } catch (\Exception $e) {
+                Log::warning('Could not fetch corporations: ' . $e->getMessage());
+            }
             
             // Get recent job logs for display
             $recentLogs = RecalcLog::with('corporation')
@@ -39,7 +64,7 @@ class SettingsController extends Controller
                 ->limit(10)
                 ->get();
             
-            return view('corpwalletmanager::settings', compact('settings', 'recentLogs'));
+            return view('corpwalletmanager::settings', compact('settings', 'recentLogs', 'corporations'));
             
         } catch (\Exception $e) {
             Log::error('CorpWalletManager settings page error: ' . $e->getMessage());
@@ -54,25 +79,31 @@ class SettingsController extends Controller
     {
         try {
             $request->validate([
-                'refresh_interval' => 'required|integer|min:5000|max:300000',
+                'refresh_minutes' => 'required|in:0,5,15,30,60',
                 'color_actual' => 'required|string|regex:/^#[0-9A-Fa-f]{6}$/',
                 'color_predicted' => 'required|string|regex:/^#[0-9A-Fa-f]{6}$/',
                 'decimals' => 'required|integer|min:0|max:8',
                 'use_precomputed_predictions' => 'boolean',
                 'use_precomputed_monthly_balances' => 'boolean',
+                'selected_corporation_id' => 'nullable|numeric',
             ]);
 
+            // Convert refresh_minutes to milliseconds for refresh_interval
+            $refreshMinutes = $request->input('refresh_minutes');
+            $refreshInterval = $refreshMinutes == '0' ? 0 : ($refreshMinutes * 60 * 1000);
+
             $settingsToUpdate = [
-                'refresh_interval',
-                'color_actual',
-                'color_predicted',
-                'decimals',
-                'use_precomputed_predictions',
-                'use_precomputed_monthly_balances',
+                'refresh_interval' => $refreshInterval,
+                'refresh_minutes' => $refreshMinutes,
+                'color_actual' => $request->input('color_actual'),
+                'color_predicted' => $request->input('color_predicted'),
+                'decimals' => $request->input('decimals'),
+                'use_precomputed_predictions' => $request->input('use_precomputed_predictions', false) ? '1' : '0',
+                'use_precomputed_monthly_balances' => $request->input('use_precomputed_monthly_balances', false) ? '1' : '0',
+                'selected_corporation_id' => $request->input('selected_corporation_id'),
             ];
 
-            foreach ($settingsToUpdate as $key) {
-                $value = $request->input($key);
+            foreach ($settingsToUpdate as $key => $value) {
                 if ($value !== null) {
                     Settings::setSetting($key, is_bool($value) ? ($value ? '1' : '0') : $value);
                 }
@@ -117,7 +148,7 @@ class SettingsController extends Controller
     /**
      * Trigger manual wallet backfill
      */
-    public function triggerBackfill()
+    public function triggerBackfill(Request $request)
     {
         try {
             // Check if a backfill job is already running
@@ -131,9 +162,14 @@ class SettingsController extends Controller
                     ->with('warning', 'A backfill job is already running. Please wait for it to complete.');
             }
             
-            BackfillWalletData::dispatch();
+            // Use selected corporation if configured
+            $corporationId = Settings::getSetting('selected_corporation_id');
             
-            Log::info('CorpWalletManager wallet backfill job dispatched manually');
+            BackfillWalletData::dispatch($corporationId);
+            
+            Log::info('CorpWalletManager wallet backfill job dispatched manually', [
+                'corporation_id' => $corporationId
+            ]);
             
             return redirect()
                 ->route('corpwalletmanager.settings')
@@ -150,7 +186,7 @@ class SettingsController extends Controller
     /**
      * Trigger prediction computation
      */
-    public function triggerPrediction()
+    public function triggerPrediction(Request $request)
     {
         try {
             // Check if a prediction job is already running
@@ -164,9 +200,14 @@ class SettingsController extends Controller
                     ->with('warning', 'A prediction job is already running. Please wait for it to complete.');
             }
             
-            ComputeDailyPrediction::dispatch();
+            // Use selected corporation if configured
+            $corporationId = Settings::getSetting('selected_corporation_id');
             
-            Log::info('CorpWalletManager prediction computation job dispatched manually');
+            ComputeDailyPrediction::dispatch($corporationId);
+            
+            Log::info('CorpWalletManager prediction computation job dispatched manually', [
+                'corporation_id' => $corporationId
+            ]);
             
             return redirect()
                 ->route('corpwalletmanager.settings')
@@ -183,7 +224,7 @@ class SettingsController extends Controller
     /**
      * Trigger division backfill
      */
-    public function triggerDivisionBackfill()
+    public function triggerDivisionBackfill(Request $request)
     {
         try {
             // Check if a division backfill job is already running
@@ -197,9 +238,14 @@ class SettingsController extends Controller
                     ->with('warning', 'A division backfill job is already running. Please wait for it to complete.');
             }
             
-            BackfillDivisionWalletData::dispatch();
+            // Use selected corporation if configured
+            $corporationId = Settings::getSetting('selected_corporation_id');
             
-            Log::info('CorpWalletManager division backfill job dispatched manually');
+            BackfillDivisionWalletData::dispatch($corporationId);
+            
+            Log::info('CorpWalletManager division backfill job dispatched manually', [
+                'corporation_id' => $corporationId
+            ]);
             
             return redirect()
                 ->route('corpwalletmanager.settings')
@@ -216,7 +262,7 @@ class SettingsController extends Controller
     /**
      * Trigger division prediction computation
      */
-    public function triggerDivisionPrediction()
+    public function triggerDivisionPrediction(Request $request)
     {
         try {
             // Check if a division prediction job is already running
@@ -230,9 +276,14 @@ class SettingsController extends Controller
                     ->with('warning', 'A division prediction job is already running. Please wait for it to complete.');
             }
             
-            ComputeDivisionDailyPrediction::dispatch();
+            // Use selected corporation if configured
+            $corporationId = Settings::getSetting('selected_corporation_id');
             
-            Log::info('CorpWalletManager division prediction job dispatched manually');
+            ComputeDivisionDailyPrediction::dispatch($corporationId);
+            
+            Log::info('CorpWalletManager division prediction job dispatched manually', [
+                'corporation_id' => $corporationId
+            ]);
             
             return redirect()
                 ->route('corpwalletmanager.settings')
@@ -280,6 +331,29 @@ class SettingsController extends Controller
                 'error' => 'Unable to fetch job status',
                 'running_jobs' => 0,
                 'recent_jobs' => []
+            ], 500);
+        }
+    }
+    
+    /**
+     * Get selected corporation settings via AJAX
+     */
+    public function getSelectedCorporation()
+    {
+        try {
+            $corporationId = Settings::getSetting('selected_corporation_id');
+            
+            return response()->json([
+                'corporation_id' => $corporationId,
+                'refresh_minutes' => Settings::getSetting('refresh_minutes', '5'),
+                'refresh_interval' => Settings::getIntegerSetting('refresh_interval', 300000)
+            ]);
+            
+        } catch (\Exception $e) {
+            Log::error('CorpWalletManager get selected corporation error: ' . $e->getMessage());
+            return response()->json([
+                'error' => 'Unable to fetch corporation settings',
+                'corporation_id' => null
             ], 500);
         }
     }
