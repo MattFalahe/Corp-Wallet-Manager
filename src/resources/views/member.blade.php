@@ -11,6 +11,12 @@
             </div>
         @endif
 
+        <!-- Corporation Info -->
+        <div class="alert alert-info mb-3">
+            <i class="fas fa-info-circle"></i> 
+            <span id="current-corp-display">Loading corporation settings...</span>
+        </div>
+
         <div class="card mb-3">
             <div class="card-header">
                 <h3 class="card-title">Corporation Wallet Overview</h3>
@@ -71,10 +77,13 @@
 <script src="https://cdn.jsdelivr.net/npm/chart.js@3.9.1/dist/chart.min.js"></script>
 <script>
 // Configuration
-const config = {
+let config = {
     decimals: {{ config('corpwalletmanager.decimals', 2) }},
     colorActual: "{{ config('corpwalletmanager.color_actual', '#4cafef') }}",
-    colorPredicted: "{{ config('corpwalletmanager.color_predicted', '#ef4444') }}"
+    colorPredicted: "{{ config('corpwalletmanager.color_predicted', '#ef4444') }}",
+    corporationId: null,
+    refreshInterval: null,
+    refreshTimer: null
 };
 
 let monthlyChart = null;
@@ -82,10 +91,65 @@ let currentMonths = 6;
 
 // Helper function to build URLs that respect the current protocol
 function buildUrl(path) {
-    // Get the current base URL without protocol
     const currentUrl = window.location;
     const baseUrl = currentUrl.protocol + '//' + currentUrl.host;
     return baseUrl + path;
+}
+
+// Load corporation settings
+function loadCorporationSettings() {
+    fetch(buildUrl('/corp-wallet-manager/api/selected-corporation'))
+        .then(response => response.json())
+        .then(data => {
+            config.corporationId = data.corporation_id;
+            config.refreshInterval = data.refresh_interval;
+            
+            // Update display
+            const displayText = config.corporationId 
+                ? `Viewing data for Corporation ID: ${config.corporationId}` 
+                : 'Viewing data for all corporations';
+                
+            document.getElementById('current-corp-display').textContent = displayText;
+            
+            // Setup auto-refresh if enabled
+            setupAutoRefresh(data.refresh_minutes);
+            
+            // Load data with the correct corporation
+            refreshData();
+        })
+        .catch(error => {
+            console.error('Error loading corporation settings:', error);
+            document.getElementById('current-corp-display').textContent = 'Error loading corporation settings';
+            // Load data anyway with no specific corporation
+            refreshData();
+        });
+}
+
+// Setup auto-refresh based on settings
+function setupAutoRefresh(refreshMinutes) {
+    // Clear existing timer
+    if (config.refreshTimer) {
+        clearInterval(config.refreshTimer);
+        config.refreshTimer = null;
+    }
+    
+    // Set new timer if refresh is enabled
+    if (refreshMinutes && refreshMinutes !== '0') {
+        const intervalMs = parseInt(refreshMinutes) * 60 * 1000;
+        config.refreshTimer = setInterval(refreshData, intervalMs);
+        console.log(`Auto-refresh enabled: every ${refreshMinutes} minutes`);
+    } else {
+        console.log('Auto-refresh disabled');
+    }
+}
+
+// Add corporation parameter to API calls
+function addCorpParam(url) {
+    if (config.corporationId) {
+        const separator = url.includes('?') ? '&' : '?';
+        return url + separator + 'corporation_id=' + config.corporationId;
+    }
+    return url;
 }
 
 // Format ISK values
@@ -103,7 +167,7 @@ function formatISK(value) {
 // Load balance info
 function loadBalanceInfo() {
     // Load current balance
-    fetch(buildUrl('/corp-wallet-manager/api/latest'))
+    fetch(buildUrl(addCorpParam('/corp-wallet-manager/api/latest')))
         .then(response => response.json())
         .then(data => {
             document.getElementById('current-balance').textContent = formatISK(data.balance);
@@ -114,7 +178,7 @@ function loadBalanceInfo() {
         });
 
     // Load summary for change
-    fetch(buildUrl('/corp-wallet-manager/api/summary'))
+    fetch(buildUrl(addCorpParam('/corp-wallet-manager/api/summary')))
         .then(response => response.json())
         .then(data => {
             const change = data.change.absolute;
@@ -136,7 +200,7 @@ function loadBalanceInfo() {
 
 // Load monthly chart
 function loadMonthlyChart(months = 6) {
-    const url = buildUrl(`/corp-wallet-manager/api/monthly-comparison?months=${months}`);
+    const url = buildUrl(addCorpParam(`/corp-wallet-manager/api/monthly-comparison?months=${months}`));
     fetch(url)
         .then(response => response.json())
         .then(data => {
@@ -215,7 +279,13 @@ function refreshData() {
 
 // Initialize
 document.addEventListener('DOMContentLoaded', function() {
-    refreshData();
+    // Load corporation settings first, which will then trigger data loading
+    loadCorporationSettings();
 });
-</script>
-@endpush
+
+// Cleanup on page unload
+window.addEventListener('beforeunload', function() {
+    if (config.refreshTimer) {
+        clearInterval(config.refreshTimer);
+    }
+});
