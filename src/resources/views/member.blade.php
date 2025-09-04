@@ -289,3 +289,5 @@ window.addEventListener('beforeunload', function() {
         clearInterval(config.refreshTimer);
     }
 });
+</script>
+@endpush
