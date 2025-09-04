@@ -99,7 +99,7 @@
             </div>
         </div>
 
-        <!-- Charts Row -->
+        <!-- Charts Row 1 -->
         <div class="row">
             <div class="col-md-6">
                 <div class="card">
@@ -124,6 +124,54 @@
                     </div>
                     <div class="card-body">
                         <canvas id="incomeExpenseChart" height="250"></canvas>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Pie Charts Row -->
+        <div class="row mt-3">
+            <div class="col-md-6">
+                <div class="card">
+                    <div class="card-header">
+                        <h3 class="card-title">Income Breakdown</h3>
+                        <div class="card-tools">
+                            <button type="button" class="btn btn-tool" data-card-widget="collapse">
+                                <i class="fas fa-minus"></i>
+                            </button>
+                        </div>
+                    </div>
+                    <div class="card-body">
+                        <div class="row">
+                            <div class="col-md-8">
+                                <canvas id="incomeBreakdownChart" height="300"></canvas>
+                            </div>
+                            <div class="col-md-4">
+                                <div id="income-legend"></div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            <div class="col-md-6">
+                <div class="card">
+                    <div class="card-header">
+                        <h3 class="card-title">Expense Breakdown</h3>
+                        <div class="card-tools">
+                            <button type="button" class="btn btn-tool" data-card-widget="collapse">
+                                <i class="fas fa-minus"></i>
+                            </button>
+                        </div>
+                    </div>
+                    <div class="card-body">
+                        <div class="row">
+                            <div class="col-md-8">
+                                <canvas id="expenseBreakdownChart" height="300"></canvas>
+                            </div>
+                            <div class="col-md-4">
+                                <div id="expense-legend"></div>
+                            </div>
+                        </div>
                     </div>
                 </div>
             </div>
@@ -166,6 +214,8 @@ let config = {
 let balanceChart = null;
 let incomeExpenseChart = null;
 let predictionChart = null;
+let incomeBreakdownChart = null;
+let expenseBreakdownChart = null;
 let currentChartMode = 'flow';
 
 // Helper function to build URLs
@@ -445,6 +495,146 @@ function loadIncomeExpenseChart() {
         });
 }
 
+// Load income breakdown pie chart
+function loadIncomeBreakdown() {
+    fetch(buildUrl(addCorpParam('/corp-wallet-manager/api/transaction-breakdown?type=income')))
+        .then(response => response.json())
+        .then(data => {
+            const ctx = document.getElementById('incomeBreakdownChart');
+            if (!ctx) {
+                console.error('Income breakdown chart canvas not found');
+                return;
+            }
+            
+            if (incomeBreakdownChart) {
+                incomeBreakdownChart.destroy();
+            }
+            
+            // Generate colors for each segment
+            const colors = [
+                '#10b981', '#3b82f6', '#8b5cf6', '#ec4899', '#f59e0b',
+                '#06b6d4', '#84cc16', '#f97316', '#6366f1', '#14b8a6'
+            ];
+            
+            incomeBreakdownChart = new Chart(ctx.getContext('2d'), {
+                type: 'doughnut',
+                data: {
+                    labels: data.labels || [],
+                    datasets: [{
+                        data: data.values || [],
+                        backgroundColor: colors,
+                        borderWidth: 2,
+                        borderColor: '#fff'
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    plugins: {
+                        legend: {
+                            display: false
+                        },
+                        tooltip: {
+                            callbacks: {
+                                label: function(context) {
+                                    const label = context.label || '';
+                                    const value = context.parsed;
+                                    const total = context.dataset.data.reduce((a, b) => a + b, 0);
+                                    const percentage = total > 0 ? ((value / total) * 100).toFixed(1) : 0;
+                                    return `${label}: ${formatISK(value, true)} (${percentage}%)`;
+                                }
+                            }
+                        }
+                    }
+                }
+            });
+            
+            // Create detailed legend
+            if (data.details && data.details.length > 0) {
+                const legendDiv = document.getElementById('income-legend');
+                let html = '<small class="text-muted">Top Sources:</small><ul class="list-unstyled mb-0">';
+                data.details.slice(0, 5).forEach((item, index) => {
+                    html += `<li><span style="color: ${colors[index]}">●</span> ${item.label}: ${formatISK(item.value, true)}</li>`;
+                });
+                html += '</ul>';
+                legendDiv.innerHTML = html;
+            }
+        })
+        .catch(error => {
+            console.error('Error loading income breakdown:', error);
+        });
+}
+
+// Load expense breakdown pie chart
+function loadExpenseBreakdown() {
+    fetch(buildUrl(addCorpParam('/corp-wallet-manager/api/transaction-breakdown?type=expense')))
+        .then(response => response.json())
+        .then(data => {
+            const ctx = document.getElementById('expenseBreakdownChart');
+            if (!ctx) {
+                console.error('Expense breakdown chart canvas not found');
+                return;
+            }
+            
+            if (expenseBreakdownChart) {
+                expenseBreakdownChart.destroy();
+            }
+            
+            // Generate colors for each segment
+            const colors = [
+                '#ef4444', '#f97316', '#f59e0b', '#eab308', '#84cc16',
+                '#22c55e', '#10b981', '#14b8a6', '#06b6d4', '#0ea5e9'
+            ];
+            
+            expenseBreakdownChart = new Chart(ctx.getContext('2d'), {
+                type: 'doughnut',
+                data: {
+                    labels: data.labels || [],
+                    datasets: [{
+                        data: data.values || [],
+                        backgroundColor: colors,
+                        borderWidth: 2,
+                        borderColor: '#fff'
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    plugins: {
+                        legend: {
+                            display: false
+                        },
+                        tooltip: {
+                            callbacks: {
+                                label: function(context) {
+                                    const label = context.label || '';
+                                    const value = context.parsed;
+                                    const total = context.dataset.data.reduce((a, b) => a + b, 0);
+                                    const percentage = total > 0 ? ((value / total) * 100).toFixed(1) : 0;
+                                    return `${label}: ${formatISK(value, true)} (${percentage}%)`;
+                                }
+                            }
+                        }
+                    }
+                }
+            });
+            
+            // Create detailed legend
+            if (data.details && data.details.length > 0) {
+                const legendDiv = document.getElementById('expense-legend');
+                let html = '<small class="text-muted">Top Expenses:</small><ul class="list-unstyled mb-0">';
+                data.details.slice(0, 5).forEach((item, index) => {
+                    html += `<li><span style="color: ${colors[index]}">●</span> ${item.label}: ${formatISK(item.value, true)}</li>`;
+                });
+                html += '</ul>';
+                legendDiv.innerHTML = html;
+            }
+        })
+        .catch(error => {
+            console.error('Error loading expense breakdown:', error);
+        });
+}
+
 // Load prediction chart
 function loadPredictionChart() {
     fetch(buildUrl(addCorpParam('/corp-wallet-manager/api/predictions?days=30')))
@@ -528,6 +718,8 @@ function refreshData() {
     loadBalanceChart(currentChartMode);
     loadIncomeExpenseChart();
     loadPredictionChart();
+    loadIncomeBreakdown();
+    loadExpenseBreakdown();
 }
 
 // Initialize on page load
