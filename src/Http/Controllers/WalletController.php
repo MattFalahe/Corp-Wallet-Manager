@@ -5,13 +5,35 @@ use Illuminate\Routing\Controller;
 use Illuminate\Http\Request;
 use Carbon\Carbon;
 use Illuminate\Support\Facades\Log;
+use Illuminate\Support\Facades\DB;
 use Seat\CorpWalletManager\Models\Settings;
 use Seat\CorpWalletManager\Models\Prediction;
 use Seat\CorpWalletManager\Models\MonthlyBalance;
 
 class WalletController extends Controller
 {
-    // ========== EXISTING METHODS ==========
+    /**
+     * Get corporation ID from request or settings
+     */
+    private function getCorporationId(Request $request)
+    {
+        // First check if it's passed in the request
+        $corporationId = $request->get('corporation_id');
+        
+        // If not in request, check settings
+        if (!$corporationId) {
+            $corporationId = Settings::getSetting('selected_corporation_id');
+        }
+        
+        // Validate it's numeric if set
+        if ($corporationId && !is_numeric($corporationId)) {
+            return null;
+        }
+        
+        return $corporationId;
+    }
+    
+    // ========== VIEW METHODS ==========
     
     public function director()
     {
@@ -33,16 +55,15 @@ class WalletController extends Controller
         }
     }
 
+    // ========== API METHODS ==========
+
     /**
      * Return the latest balance + prediction for this month.
      */
     public function latest(Request $request)
     {
         try {
-            $corporationId = $request->get('corporation_id');
-            if ($corporationId && !is_numeric($corporationId)) {
-                return response()->json(['error' => 'Invalid corporation ID'], 400);
-            }
+            $corporationId = $this->getCorporationId($request);
 
             $today = Carbon::today();
             $monthStart = $today->copy()->startOfMonth();
@@ -70,6 +91,7 @@ class WalletController extends Controller
                 'predicted' => (float)$predicted,
                 'date' => $today->format('Y-m-d'),
                 'month' => $monthStart->format('Y-m'),
+                'corporation_id' => $corporationId,
             ]);
 
         } catch (\Exception $e) {
@@ -94,10 +116,7 @@ class WalletController extends Controller
     public function monthlyComparison(Request $request)
     {
         try {
-            $corporationId = $request->get('corporation_id');
-            if ($corporationId && !is_numeric($corporationId)) {
-                return response()->json(['error' => 'Invalid corporation ID'], 400);
-            }
+            $corporationId = $this->getCorporationId($request);
 
             $monthsToShow = min(max((int)$request->get('months', 6), 1), 24); // Between 1 and 24 months
             
@@ -158,10 +177,7 @@ class WalletController extends Controller
     public function predictions(Request $request)
     {
         try {
-            $corporationId = $request->get('corporation_id');
-            if ($corporationId && !is_numeric($corporationId)) {
-                return response()->json(['error' => 'Invalid corporation ID'], 400);
-            }
+            $corporationId = $this->getCorporationId($request);
 
             $days = min(max((int)$request->get('days', 30), 1), 365); // Between 1 and 365 days
             
@@ -214,9 +230,22 @@ class WalletController extends Controller
     public function divisionBreakdown(Request $request)
     {
         try {
-            $corporationId = $request->get('corporation_id');
-            if (!$corporationId || !is_numeric($corporationId)) {
-                return response()->json(['error' => 'Corporation ID required'], 400);
+            $corporationId = $this->getCorporationId($request);
+            
+            // Division breakdown requires a corporation ID
+            if (!$corporationId) {
+                // Try to get the first available corporation
+                $corporationId = DB::table('corporation_wallet_balances')
+                    ->whereNotNull('corporation_id')
+                    ->value('corporation_id');
+                    
+                if (!$corporationId) {
+                    return response()->json([
+                        'labels' => [],
+                        'data' => [],
+                        'error' => 'No corporation data available'
+                    ]);
+                }
             }
 
             $month = $request->get('month', Carbon::now()->format('Y-m'));
@@ -231,8 +260,11 @@ class WalletController extends Controller
                 ->orderBy('division_id')
                 ->get();
 
-            $labels = $divisions->pluck('division_id')->map(function ($divId) {
-                return "Division " . $divId;
+            // Get actual division names from the database
+            $divisionNames = $this->getAllDivisionNames($corporationId);
+            
+            $labels = $divisions->pluck('division_id')->map(function ($divId) use ($divisionNames) {
+                return $divisionNames[$divId] ?? "Division $divId";
             })->toArray();
             
             $data = $divisions->pluck('balance')->map(function ($value) {
@@ -269,10 +301,7 @@ class WalletController extends Controller
     public function summary(Request $request)
     {
         try {
-            $corporationId = $request->get('corporation_id');
-            if ($corporationId && !is_numeric($corporationId)) {
-                return response()->json(['error' => 'Invalid corporation ID'], 400);
-            }
+            $corporationId = $this->getCorporationId($request);
 
             $currentMonth = Carbon::now()->format('Y-m');
             $lastMonth = Carbon::now()->subMonth()->format('Y-m');
@@ -340,34 +369,37 @@ class WalletController extends Controller
         }
     }
     
-    // ========== NEW METHODS ==========
-    
     /**
      * Get actual wallet balance from corporation_wallet_balances table
      */
     public function walletActual(Request $request)
     {
         try {
-            $corporationId = $request->get('corporation_id');
+            $corporationId = $this->getCorporationId($request);
             
             // If no corporation specified, get the first one we have
             if (!$corporationId) {
-                $corporationId = \DB::table('corporation_wallet_balances')
+                $corporationId = DB::table('corporation_wallet_balances')
                     ->value('corporation_id');
             }
             
             // Use corporation_wallet_balances table which has the current balance
-            $query = \DB::table('corporation_wallet_balances')
-                ->selectRaw('SUM(balance) as total_balance')
-                ->where('corporation_id', $corporationId);
+            $query = DB::table('corporation_wallet_balances')
+                ->selectRaw('SUM(balance) as total_balance');
+            
+            if ($corporationId) {
+                $query->where('corporation_id', $corporationId);
+            }
             
             $result = $query->first();
             $balance = $result ? (float)$result->total_balance : 0;
             
             // Also get division count for info
-            $divisionCount = \DB::table('corporation_wallet_balances')
-                ->where('corporation_id', $corporationId)
-                ->count();
+            $divisionCountQuery = DB::table('corporation_wallet_balances');
+            if ($corporationId) {
+                $divisionCountQuery->where('corporation_id', $corporationId);
+            }
+            $divisionCount = $divisionCountQuery->count();
             
             return response()->json([
                 'balance' => $balance,
@@ -396,10 +428,10 @@ class WalletController extends Controller
     public function today(Request $request)
     {
         try {
-            $corporationId = $request->get('corporation_id');
+            $corporationId = $this->getCorporationId($request);
             $today = Carbon::today();
             
-            $query = \DB::table('corporation_wallet_journals')
+            $query = DB::table('corporation_wallet_journals')
                 ->whereDate('date', $today)
                 ->selectRaw('SUM(amount) as total_change');
                 
@@ -437,10 +469,11 @@ class WalletController extends Controller
     public function divisionCurrent(Request $request)
     {
         try {
-            $corporationId = $request->get('corporation_id');
-            if (!$corporationId || !is_numeric($corporationId)) {
+            $corporationId = $this->getCorporationId($request);
+            
+            if (!$corporationId) {
                 // Get first available corporation
-                $corporationId = \DB::table('corporation_wallet_balances')
+                $corporationId = DB::table('corporation_wallet_balances')
                     ->whereNotNull('corporation_id')
                     ->value('corporation_id');
             }
@@ -452,7 +485,7 @@ class WalletController extends Controller
             $currentMonth = Carbon::now()->format('Y-m');
             
             // Get current division balances from corporation_wallet_balances
-            $walletBalances = \DB::table('corporation_wallet_balances')
+            $walletBalances = DB::table('corporation_wallet_balances')
                 ->where('corporation_id', $corporationId)
                 ->get()
                 ->keyBy('division');
@@ -463,19 +496,27 @@ class WalletController extends Controller
                 ->get()
                 ->keyBy('division_id');
             
+            // Get actual division names from the database
+            $divisionNames = $this->getAllDivisionNames($corporationId);
+            
             $divisions = [];
             
-            // Build division data
+            // Build division data with actual names
             foreach ($walletBalances as $walletBalance) {
                 $monthChange = $monthlyChanges->get($walletBalance->division);
                 
                 $divisions[] = [
                     'id' => $walletBalance->division,
-                    'name' => $this->getDivisionName($walletBalance->division),
+                    'name' => $divisionNames[$walletBalance->division] ?? "Division {$walletBalance->division}",
                     'balance' => (float)$walletBalance->balance,
                     'change' => $monthChange ? (float)$monthChange->balance : 0,
                 ];
             }
+            
+            // Sort by division ID for consistent ordering
+            usort($divisions, function($a, $b) {
+                return $a['id'] <=> $b['id'];
+            });
             
             return response()->json([
                 'divisions' => $divisions,
@@ -502,7 +543,7 @@ class WalletController extends Controller
     public function balanceHistory(Request $request)
     {
         try {
-            $corporationId = $request->get('corporation_id');
+            $corporationId = $this->getCorporationId($request);
             $months = min(max((int)$request->get('months', 6), 1), 24);
             
             $startDate = Carbon::now()->subMonths($months)->startOfMonth();
@@ -559,12 +600,12 @@ class WalletController extends Controller
     public function incomeExpense(Request $request)
     {
         try {
-            $corporationId = $request->get('corporation_id');
+            $corporationId = $this->getCorporationId($request);
             $months = min(max((int)$request->get('months', 6), 1), 24);
             
             $startDate = Carbon::now()->subMonths($months)->startOfMonth();
             
-            $query = \DB::table('corporation_wallet_journals')
+            $query = DB::table('corporation_wallet_journals')
                 ->selectRaw('
                     DATE_FORMAT(date, "%Y-%m") as month,
                     SUM(CASE WHEN amount > 0 THEN amount ELSE 0 END) as income,
@@ -619,14 +660,14 @@ class WalletController extends Controller
     public function transactionBreakdown(Request $request)
     {
         try {
-            $corporationId = $request->get('corporation_id');
+            $corporationId = $this->getCorporationId($request);
             $type = $request->get('type', 'expense'); // 'income' or 'expense'
             $months = (int)$request->get('months', 1); // Default to current month
             
             $startDate = Carbon::now()->subMonths($months)->startOfMonth();
             
             // Build the query
-            $query = \DB::table('corporation_wallet_journals')
+            $query = DB::table('corporation_wallet_journals')
                 ->selectRaw('
                     ref_type,
                     SUM(ABS(amount)) as total_amount,
@@ -729,21 +770,81 @@ class WalletController extends Controller
     // ========== HELPER METHODS ==========
     
     /**
-     * Helper function to get division names
+     * Helper function to get division names from database
      */
-    private function getDivisionName($divisionId)
+    private function getDivisionName($divisionId, $corporationId = null)
     {
-        $names = [
-            1 => 'Master Wallet',
-            2 => 'Corp Production',
-            3 => 'Corp Markets',
-            4 => 'Taxes and Bills',
-            5 => 'Corp SRP',
-            6 => 'Corp Buyback',
-            7 => 'Reserves',
-        ];
-        
-        return $names[$divisionId] ?? "Division $divisionId";
+        try {
+            // Try to get the division name from the corporation_divisions table
+            if ($corporationId) {
+                $division = DB::table('corporation_divisions')
+                    ->where('corporation_id', $corporationId)
+                    ->where('division', $divisionId)
+                    ->first();
+                
+                if ($division && !empty($division->name)) {
+                    return $division->name;
+                }
+            }
+            
+            // Fallback to default EVE division names if not found
+            $defaultNames = [
+                1 => 'Master Wallet',
+                2 => '2nd Wallet Division',
+                3 => '3rd Wallet Division',
+                4 => '4th Wallet Division',
+                5 => '5th Wallet Division',
+                6 => '6th Wallet Division',
+                7 => '7th Wallet Division',
+            ];
+            
+            return $defaultNames[$divisionId] ?? "Division $divisionId";
+            
+        } catch (\Exception $e) {
+            Log::warning('Failed to get division name from database', [
+                'division_id' => $divisionId,
+                'corporation_id' => $corporationId,
+                'error' => $e->getMessage()
+            ]);
+            
+            // Return a generic name if database lookup fails
+            return "Division $divisionId";
+        }
+    }
+    
+    /**
+     * Get all division names for a corporation
+     */
+    private function getAllDivisionNames($corporationId)
+    {
+        try {
+            $divisions = DB::table('corporation_divisions')
+                ->where('corporation_id', $corporationId)
+                ->pluck('name', 'division')
+                ->toArray();
+            
+            // Fill in any missing divisions with defaults
+            for ($i = 1; $i <= 7; $i++) {
+                if (!isset($divisions[$i]) || empty($divisions[$i])) {
+                    $divisions[$i] = $this->getDivisionName($i);
+                }
+            }
+            
+            return $divisions;
+            
+        } catch (\Exception $e) {
+            Log::warning('Failed to get all division names', [
+                'corporation_id' => $corporationId,
+                'error' => $e->getMessage()
+            ]);
+            
+            // Return default names
+            $divisions = [];
+            for ($i = 1; $i <= 7; $i++) {
+                $divisions[$i] = $this->getDivisionName($i);
+            }
+            return $divisions;
+        }
     }
 
     /**
