@@ -1183,77 +1183,426 @@ function loadAnalyticsData() {
 }
 
 function calculateHealthScore() {
-    // This would need new API endpoints - for now showing placeholder
-    const score = 75; // Placeholder
-    document.getElementById('health-score').textContent = score + '/100';
-    const bar = document.getElementById('health-bar');
-    bar.style.width = score + '%';
-    bar.className = 'progress-bar ' + (score > 70 ? 'bg-success' : score > 40 ? 'bg-warning' : 'bg-danger');
-    document.getElementById('health-details').innerHTML = `
-        <p>Balance Stability: <strong>Good</strong></p>
-        <p>Income Consistency: <strong>Moderate</strong></p>
-        <p>Expense Control: <strong>Excellent</strong></p>
-    `;
+    fetch(buildUrl(addCorpParam('/corp-wallet-manager/api/analytics/health-score')))
+        .then(response => response.json())
+        .then(data => {
+            if (data.error) {
+                console.error('Health score error:', data.error);
+                return;
+            }
+            
+            // Update score display
+            document.getElementById('health-score').textContent = data.score + '/100';
+            
+            // Update progress bar
+            const bar = document.getElementById('health-bar');
+            bar.style.width = data.score + '%';
+            
+            // Set color based on score
+            let barClass = 'progress-bar ';
+            if (data.score >= 80) {
+                barClass += 'bg-success';
+            } else if (data.score >= 60) {
+                barClass += 'bg-primary';
+            } else if (data.score >= 40) {
+                barClass += 'bg-warning';
+            } else {
+                barClass += 'bg-danger';
+            }
+            bar.className = barClass;
+            
+            // Update details
+            let detailsHtml = `
+                <p>Balance Stability: <strong>${data.components.balance_stability}%</strong></p>
+                <p>Income Consistency: <strong>${data.components.income_consistency}%</strong></p>
+                <p>Expense Control: <strong>${data.components.expense_control}%</strong></p>
+                <hr>
+                <small class="text-muted">Status: <strong>${data.status}</strong></small>
+            `;
+            document.getElementById('health-details').innerHTML = detailsHtml;
+        })
+        .catch(error => {
+            console.error('Error loading health score:', error);
+            document.getElementById('health-score').innerHTML = '<i class="fas fa-exclamation-triangle text-warning"></i>';
+        });
 }
 
 function calculateBurnRate() {
-    // Placeholder calculations
-    document.getElementById('daily-burn').textContent = formatISK(5000000, true);
-    document.getElementById('days-remaining').textContent = '45 days';
-    document.getElementById('weekly-avg').textContent = formatISK(35000000, true);
-    document.getElementById('monthly-avg').textContent = formatISK(150000000, true);
+    fetch(buildUrl(addCorpParam('/corp-wallet-manager/api/analytics/burn-rate')))
+        .then(response => response.json())
+        .then(data => {
+            if (data.error) {
+                console.error('Burn rate error:', data.error);
+                return;
+            }
+            
+            // Update burn rate displays
+            document.getElementById('daily-burn').textContent = formatISK(Math.abs(data.burn_rates.daily), true);
+            document.getElementById('daily-burn').className = data.burn_rates.daily > 0 ? 'text-danger' : 'text-success';
+            
+            // Days remaining
+            const daysText = data.days_of_cash >= 999 ? '999+ days' : data.days_of_cash + ' days';
+            document.getElementById('days-remaining').textContent = daysText;
+            document.getElementById('days-remaining').className = 
+                data.days_of_cash > 90 ? 'text-success' : 
+                data.days_of_cash > 30 ? 'text-warning' : 'text-danger';
+            
+            // Averages
+            document.getElementById('weekly-avg').textContent = formatISK(Math.abs(data.burn_rates.weekly * 7), true);
+            document.getElementById('monthly-avg').textContent = formatISK(Math.abs(data.burn_rates.monthly * 30), true);
+            
+            // Add runway date if available
+            if (data.runway_date) {
+                document.getElementById('days-remaining').innerHTML += 
+                    `<br><small class="text-muted">Until: ${data.runway_date}</small>`;
+            }
+        })
+        .catch(error => {
+            console.error('Error loading burn rate:', error);
+        });
 }
 
 function calculateFinancialRatios() {
-    // Placeholder ratios
-    document.getElementById('liquidity-ratio').textContent = '2.5';
-    document.getElementById('growth-rate').textContent = '+15%';
-    document.getElementById('income-expense-ratio').textContent = '1.3';
-    document.getElementById('volatility').textContent = '12%';
+    fetch(buildUrl(addCorpParam('/corp-wallet-manager/api/analytics/financial-ratios')))
+        .then(response => response.json())
+        .then(data => {
+            if (data.error) {
+                console.error('Financial ratios error:', data.error);
+                return;
+            }
+            
+            // Update ratio displays
+            document.getElementById('liquidity-ratio').textContent = data.liquidity_ratio.toFixed(2);
+            
+            const growthEl = document.getElementById('growth-rate');
+            growthEl.textContent = (data.growth_rate > 0 ? '+' : '') + data.growth_rate + '%';
+            growthEl.className = 'info-box-number ' + (data.growth_rate > 0 ? 'text-success' : 'text-danger');
+            
+            document.getElementById('income-expense-ratio').textContent = data.income_expense_ratio.toFixed(2);
+            document.getElementById('volatility').textContent = data.volatility + '%';
+            
+            // Update ratio cards with interpretations
+            const cards = document.querySelectorAll('.info-box');
+            // Add interpretation badges or tooltips based on data.interpretations
+        })
+        .catch(error => {
+            console.error('Error loading financial ratios:', error);
+        });
 }
 
 // Trends Tab Functions
 function loadTrendsData() {
-    // These would need new API endpoints
-    console.log('Loading trends data...');
+    loadActivityHeatmap();
+    loadBestWorstDays();
+    loadWeeklyPatterns();
+}
+
+function loadActivityHeatmap() {
+    fetch(buildUrl(addCorpParam('/corp-wallet-manager/api/analytics/activity-heatmap?days=90')))
+        .then(response => response.json())
+        .then(data => {
+            if (data.error) {
+                console.error('Activity heatmap error:', data.error);
+                return;
+            }
+            
+            // Create heatmap visualization
+            const container = document.getElementById('activity-heatmap');
+            let html = '<div class="heatmap-grid">';
+            
+            // Group by weeks for calendar view
+            const weeks = {};
+            data.heatmap.forEach(day => {
+                const date = new Date(day.date);
+                const weekNum = Math.floor((date.getDate() - 1) / 7);
+                if (!weeks[weekNum]) weeks[weekNum] = [];
+                weeks[weekNum].push(day);
+            });
+            
+            // Simple grid representation
+            html += '<div class="row">';
+            data.heatmap.forEach(day => {
+                const colorClass = day.value > 0 ? 'bg-success' : day.value < 0 ? 'bg-danger' : 'bg-secondary';
+                const opacity = Math.min(Math.abs(day.intensity) / 10, 1);
+                html += `
+                    <div class="col-auto p-1" title="${day.date}: ${formatISK(day.value, true)}">
+                        <div class="${colorClass}" style="width: 15px; height: 15px; opacity: ${opacity}; cursor: pointer;"></div>
+                    </div>
+                `;
+            });
+            html += '</div>';
+            
+            // Add summary
+            html += `
+                <div class="mt-3">
+                    <small class="text-muted">
+                        Total Days: ${data.summary.total_days} | 
+                        Positive: ${data.summary.positive_days} | 
+                        Negative: ${data.summary.negative_days}
+                    </small>
+                </div>
+            `;
+            
+            container.innerHTML = html;
+        })
+        .catch(error => {
+            console.error('Error loading activity heatmap:', error);
+        });
+}
+
+function loadBestWorstDays() {
+    fetch(buildUrl(addCorpParam('/corp-wallet-manager/api/analytics/best-worst-days')))
+        .then(response => response.json())
+        .then(data => {
+            if (data.error) {
+                console.error('Best/worst days error:', data.error);
+                return;
+            }
+            
+            // Update best days list
+            let bestHtml = '';
+            data.best_days.forEach((day, index) => {
+                bestHtml += `
+                    <li class="mb-2">
+                        <strong>${index + 1}.</strong> ${day.date}
+                        <span class="float-right text-success">+${formatISK(day.income, true)}</span>
+                    </li>
+                `;
+            });
+            document.getElementById('best-days').innerHTML = bestHtml || '<li class="text-muted">No data available</li>';
+            
+            // Update worst days list
+            let worstHtml = '';
+            data.worst_days.forEach((day, index) => {
+                worstHtml += `
+                    <li class="mb-2">
+                        <strong>${index + 1}.</strong> ${day.date}
+                        <span class="float-right text-danger">-${formatISK(day.expenses, true)}</span>
+                    </li>
+                `;
+            });
+            document.getElementById('worst-days').innerHTML = worstHtml || '<li class="text-muted">No data available</li>';
+        })
+        .catch(error => {
+            console.error('Error loading best/worst days:', error);
+        });
+}
+
+let weeklyPatternChart = null;
+
+function loadWeeklyPatterns() {
+    fetch(buildUrl(addCorpParam('/corp-wallet-manager/api/analytics/weekly-patterns')))
+        .then(response => response.json())
+        .then(data => {
+            if (data.error) {
+                console.error('Weekly patterns error:', data.error);
+                return;
+            }
+            
+            const ctx = document.getElementById('weekly-pattern-chart');
+            if (!ctx) return;
+            
+            if (weeklyPatternChart) {
+                weeklyPatternChart.destroy();
+            }
+            
+            const labels = data.patterns.map(p => p.day);
+            const incomeData = data.patterns.map(p => p.avg_income);
+            const expenseData = data.patterns.map(p => p.avg_expenses);
+            
+            weeklyPatternChart = new Chart(ctx.getContext('2d'), {
+                type: 'bar',
+                data: {
+                    labels: labels,
+                    datasets: [
+                        {
+                            label: 'Average Income',
+                            data: incomeData,
+                            backgroundColor: '#10b981',
+                            borderColor: '#10b981',
+                            borderWidth: 1
+                        },
+                        {
+                            label: 'Average Expenses',
+                            data: expenseData,
+                            backgroundColor: '#ef4444',
+                            borderColor: '#ef4444',
+                            borderWidth: 1
+                        }
+                    ]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    plugins: {
+                        legend: { position: 'top' },
+                        tooltip: {
+                            callbacks: {
+                                label: function(context) {
+                                    return context.dataset.label + ': ' + formatISK(context.parsed.y, true);
+                                }
+                            }
+                        }
+                    },
+                    scales: {
+                        y: {
+                            beginAtZero: true,
+                            ticks: {
+                                callback: function(value) {
+                                    return formatISK(value, true).replace(' ISK', '');
+                                }
+                            }
+                        }
+                    }
+                }
+            });
+            
+            // Add best/worst day info
+            if (data.best_day) {
+                const info = document.createElement('div');
+                info.className = 'mt-2 text-center';
+                info.innerHTML = `
+                    <small class="text-muted">
+                        Best Day: <strong>${data.best_day.day}</strong> | 
+                        Worst Day: <strong>${data.worst_day.day}</strong>
+                    </small>
+                `;
+                ctx.parentElement.appendChild(info);
+            }
+        })
+        .catch(error => {
+            console.error('Error loading weekly patterns:', error);
+        });
 }
 
 // Performance Tab Functions
 function loadPerformanceData() {
-    // These would need new API endpoints
-    console.log('Loading performance data...');
+    loadDivisionPerformance();
 }
 
-// Cash Flow Tab Functions
-function loadCashFlowData() {
-    // These would need new API endpoints
-    console.log('Loading cash flow data...');
+function loadDivisionPerformance() {
+    fetch(buildUrl(addCorpParam('/corp-wallet-manager/api/analytics/division-performance')))
+        .then(response => response.json())
+        .then(data => {
+            if (data.error) {
+                console.error('Division performance error:', data.error);
+                return;
+            }
+            
+            // Update division performance table
+            let tableHtml = '';
+            data.divisions.forEach(div => {
+                const trendIcon = div.trend === 'up' ? 
+                    '<i class="fas fa-arrow-up text-success"></i>' : 
+                    '<i class="fas fa-arrow-down text-danger"></i>';
+                
+                const roiClass = div.roi > 0 ? 'text-success' : 'text-danger';
+                
+                tableHtml += `
+                    <tr>
+                        <td>${div.name}</td>
+                        <td>${formatISK(div.balance, true)}</td>
+                        <td class="text-success">${formatISK(div.monthly_income, true)}</td>
+                        <td class="text-danger">${formatISK(div.monthly_expense, true)}</td>
+                        <td class="${roiClass}">${div.roi}%</td>
+                        <td>${div.efficiency.toFixed(3)}</td>
+                        <td>${trendIcon}</td>
+                    </tr>
+                `;
+            });
+            
+            document.getElementById('division-performance').innerHTML = 
+                tableHtml || '<tr><td colspan="7" class="text-center text-muted">No performance data available</td></tr>';
+            
+            // Update top income sources and expense categories
+            if (data.summary && data.summary.best_performer) {
+                document.getElementById('top-income-sources').innerHTML = `
+                    <li><strong>Best Performer:</strong> ${data.summary.best_performer.name}</li>
+                    <li>ROI: ${data.summary.best_performer.roi}%</li>
+                    <li>Net Flow: ${formatISK(data.summary.best_performer.net_flow, true)}</li>
+                `;
+            }
+            
+            if (data.summary && data.summary.worst_performer) {
+                document.getElementById('top-expense-categories').innerHTML = `
+                    <li><strong>Worst Performer:</strong> ${data.summary.worst_performer.name}</li>
+                    <li>ROI: ${data.summary.worst_performer.roi}%</li>
+                    <li>Net Flow: ${formatISK(data.summary.worst_performer.net_flow, true)}</li>
+                `;
+            }
+        })
+        .catch(error => {
+            console.error('Error loading division performance:', error);
+        });
 }
 
 // Reports Tab Functions
 function loadReportsData() {
     generateExecutiveSummary();
+    populateReportMonths();
 }
 
 function generateExecutiveSummary() {
-    // Placeholder summary
-    document.getElementById('key-insights').innerHTML = `
-        <li>Monthly income increased by 23% compared to last month</li>
-        <li>Expenses are within budget parameters</li>
-        <li>Cash reserves adequate for 45 days of operations</li>
-    `;
+    fetch(buildUrl(addCorpParam('/corp-wallet-manager/api/analytics/executive-summary')))
+        .then(response => response.json())
+        .then(data => {
+            if (data.error) {
+                console.error('Executive summary error:', data.error);
+                return;
+            }
+            
+            // Update insights
+            let insightsHtml = '';
+            data.insights.forEach(insight => {
+                insightsHtml += `<li>${insight}</li>`;
+            });
+            document.getElementById('key-insights').innerHTML = insightsHtml || '<li>No insights available</li>';
+            
+            // Update recommendations
+            let recommendationsHtml = '';
+            data.recommendations.forEach(rec => {
+                recommendationsHtml += `<li>${rec}</li>`;
+            });
+            document.getElementById('recommendations').innerHTML = recommendationsHtml || '<li>No recommendations at this time</li>';
+            
+            // Update risk assessment
+            let riskClass = 'alert-info';
+            if (data.risk_assessment.level === 'Critical') riskClass = 'alert-danger';
+            else if (data.risk_assessment.level === 'High') riskClass = 'alert-warning';
+            else if (data.risk_assessment.level === 'Medium') riskClass = 'alert-warning';
+            
+            let riskHtml = `
+                <div class="alert ${riskClass}">
+                    <strong>Risk Level: ${data.risk_assessment.level}</strong>
+                    <ul class="mb-0 mt-2">
+            `;
+            
+            data.risk_assessment.factors.forEach(factor => {
+                riskHtml += `<li>${factor}</li>`;
+            });
+            
+            riskHtml += '</ul></div>';
+            document.getElementById('risk-assessment').innerHTML = riskHtml;
+        })
+        .catch(error => {
+            console.error('Error loading executive summary:', error);
+        });
+}
+
+function populateReportMonths() {
+    const select = document.getElementById('report-month');
+    if (!select) return;
     
-    document.getElementById('recommendations').innerHTML = `
-        <li>Consider investing surplus funds in market opportunities</li>
-        <li>Review Division 3 expenses - 40% above average</li>
-        <li>Optimize tax payments schedule for better cash flow</li>
-    `;
-    
-    document.getElementById('risk-assessment').innerHTML = `
-        <div class="alert alert-warning">
-            <strong>Medium Risk:</strong> Dependency on single income source (Player Trading) at 65% of total income
-        </div>
-    `;
+    // Generate last 12 months
+    let html = '';
+    for (let i = 0; i < 12; i++) {
+        const date = new Date();
+        date.setMonth(date.getMonth() - i);
+        const value = date.toISOString().slice(0, 7);
+        const label = date.toLocaleDateString('en-US', { year: 'numeric', month: 'long' });
+        html += `<option value="${value}">${label}</option>`;
+    }
+    select.innerHTML = html;
 }
 
 function exportReport(format) {
