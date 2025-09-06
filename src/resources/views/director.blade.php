@@ -530,14 +530,23 @@
                             <div class="card">
                                 <div class="card-header">
                                     <h3 class="card-title">Daily Cash Flow Trend</h3>
+                                    <div class="card-tools">
+                                        <div class="btn-group btn-group-sm">
+                                            <button type="button" class="btn btn-outline-secondary active" onclick="loadDailyCashFlowWithDays(30)">30D</button>
+                                            <button type="button" class="btn btn-outline-secondary" onclick="loadDailyCashFlowWithDays(60)">60D</button>
+                                            <button type="button" class="btn btn-outline-secondary" onclick="loadDailyCashFlowWithDays(90)">90D</button>
+                                        </div>
+                                    </div>
                                 </div>
                                 <div class="card-body">
                                     <canvas id="daily-cashflow-chart" height="200"></canvas>
+                                    <div id="cashflow-statistics" class="mt-3">
+                                        <!-- Statistics will be populated here -->
+                                    </div>
                                 </div>
                             </div>
                         </div>
                     </div>
-                </div>
 
                 <!-- Reports Tab -->
                 <div class="tab-pane" id="reports">
@@ -1373,10 +1382,8 @@ function loadNetFlowSummary() {
         });
 }
 
-function loadDailyCashFlowTrend() {
-    // This would need a new API endpoint for daily data
-    // For now, we'll use monthly data as a placeholder
-    fetch(buildUrl(addCorpParam('/corp-wallet-manager/api/income-expense?months=6')))
+function loadDailyCashFlowTrend(days = 30) {
+    fetch(buildUrl(addCorpParam(`/corp-wallet-manager/api/analytics/daily-cashflow?days=${days}`)))
         .then(response => response.json())
         .then(data => {
             const ctx = document.getElementById('daily-cashflow-chart');
@@ -1386,55 +1393,213 @@ function loadDailyCashFlowTrend() {
                 dailyCashflowChart.destroy();
             }
             
-            // Calculate net flow for each period
-            const netFlowData = [];
-            if (data.income && data.expenses) {
-                for (let i = 0; i < data.income.length; i++) {
-                    netFlowData.push((data.income[i] || 0) - (data.expenses[i] || 0));
-                }
-            }
-            
+            // Create a more comprehensive daily cash flow chart
             dailyCashflowChart = new Chart(ctx.getContext('2d'), {
-                type: 'bar',
+                type: 'line',
                 data: {
                     labels: data.labels || [],
-                    datasets: [{
-                        label: 'Net Cash Flow',
-                        data: netFlowData,
-                        backgroundColor: netFlowData.map(v => v >= 0 ? '#10b981' : '#ef4444'),
-                        borderColor: '#1f2937',
-                        borderWidth: 1
-                    }]
+                    datasets: [
+                        {
+                            label: 'Daily Income',
+                            data: data.datasets.income || [],
+                            borderColor: '#10b981',
+                            backgroundColor: '#10b98120',
+                            borderWidth: 2,
+                            fill: false,
+                            tension: 0.1
+                        },
+                        {
+                            label: 'Daily Expenses',
+                            data: data.datasets.expenses || [],
+                            borderColor: '#ef4444',
+                            backgroundColor: '#ef444420',
+                            borderWidth: 2,
+                            fill: false,
+                            tension: 0.1
+                        },
+                        {
+                            label: 'Net Flow',
+                            data: data.datasets.net_flow || [],
+                            borderColor: '#3b82f6',
+                            backgroundColor: '#3b82f620',
+                            borderWidth: 3,
+                            fill: true,
+                            tension: 0.1
+                        },
+                        {
+                            label: 'Cumulative',
+                            data: data.datasets.cumulative || [],
+                            borderColor: '#8b5cf6',
+                            backgroundColor: '#8b5cf620',
+                            borderWidth: 2,
+                            borderDash: [5, 5],
+                            fill: false,
+                            tension: 0.1,
+                            yAxisID: 'y1'
+                        }
+                    ]
                 },
                 options: {
                     responsive: true,
                     maintainAspectRatio: false,
+                    interaction: {
+                        mode: 'index',
+                        intersect: false,
+                    },
                     plugins: {
-                        legend: { display: false },
+                        legend: { 
+                            position: 'top',
+                            labels: {
+                                usePointStyle: true,
+                                padding: 10,
+                                font: { size: 11 }
+                            }
+                        },
                         tooltip: {
                             callbacks: {
                                 label: function(context) {
-                                    return 'Net Flow: ' + formatISK(context.parsed.y);
+                                    return context.dataset.label + ': ' + formatISK(context.parsed.y, true);
                                 }
                             }
+                        },
+                        title: {
+                            display: true,
+                            text: `Last ${data.period?.days || 30} Days Cash Flow Analysis`,
+                            font: { size: 14 }
                         }
                     },
                     scales: {
                         y: {
+                            type: 'linear',
+                            display: true,
+                            position: 'left',
                             beginAtZero: true,
                             ticks: {
                                 callback: function(value) {
                                     return formatISK(value, true).replace(' ISK', '');
                                 }
+                            },
+                            title: {
+                                display: true,
+                                text: 'Daily Flow'
+                            }
+                        },
+                        y1: {
+                            type: 'linear',
+                            display: true,
+                            position: 'right',
+                            grid: {
+                                drawOnChartArea: false,
+                            },
+                            ticks: {
+                                callback: function(value) {
+                                    return formatISK(value, true).replace(' ISK', '');
+                                }
+                            },
+                            title: {
+                                display: true,
+                                text: 'Cumulative'
                             }
                         }
                     }
                 }
             });
+            
+            // Update statistics if we add a statistics card
+            if (data.statistics) {
+                updateCashFlowStatistics(data.statistics);
+            }
         })
         .catch(error => {
             console.error('Error loading daily cash flow trend:', error);
         });
+}
+
+// Function to handle the day selector buttons
+function loadDailyCashFlowWithDays(days) {
+    // Update button states
+    event.target.parentElement.querySelectorAll('.btn').forEach(btn => {
+        btn.classList.remove('active', 'btn-secondary');
+        btn.classList.add('btn-outline-secondary');
+    });
+    event.target.classList.remove('btn-outline-secondary');
+    event.target.classList.add('active');
+    
+    // Call the main function with specified days
+    loadDailyCashFlowTrend(days);
+}
+
+// Function to display statistics below the chart
+function updateCashFlowStatistics(stats) {
+    const statsContainer = document.getElementById('cashflow-statistics');
+    if (statsContainer) {
+        let html = `
+            <div class="row mt-3">
+                <div class="col-md-3">
+                    <small class="text-muted">Average Daily Flow</small>
+                    <h5 class="${stats.average_daily_flow >= 0 ? 'text-success' : 'text-danger'}">
+                        ${formatISK(stats.average_daily_flow, true)}
+                    </h5>
+                </div>
+                <div class="col-md-3">
+                    <small class="text-muted">Best Day</small>
+                    <h5 class="text-success">${formatISK(stats.best_day.amount, true)}</h5>
+                    <small>${stats.best_day.date}</small>
+                </div>
+                <div class="col-md-3">
+                    <small class="text-muted">Worst Day</small>
+                    <h5 class="text-danger">${formatISK(stats.worst_day.amount, true)}</h5>
+                    <small>${stats.worst_day.date}</small>
+                </div>
+                <div class="col-md-3">
+                    <small class="text-muted">Positive/Negative Days</small>
+                    <h5>
+                        <span class="text-success">${stats.days_positive}</span> / 
+                        <span class="text-danger">${stats.days_negative}</span>
+                    </h5>
+                </div>
+            </div>
+        `;
+        statsContainer.innerHTML = html;
+    }
+}
+
+               
+
+// Optional: Add this function to display statistics below the chart
+function updateCashFlowStatistics(stats) {
+    // You can add a statistics summary below the chart if desired
+    const statsContainer = document.getElementById('cashflow-statistics');
+    if (statsContainer) {
+        let html = `
+            <div class="row mt-3">
+                <div class="col-md-3">
+                    <small class="text-muted">Average Daily Flow</small>
+                    <h5 class="${stats.average_daily_flow >= 0 ? 'text-success' : 'text-danger'}">
+                        ${formatISK(stats.average_daily_flow, true)}
+                    </h5>
+                </div>
+                <div class="col-md-3">
+                    <small class="text-muted">Best Day</small>
+                    <h5 class="text-success">${formatISK(stats.best_day.amount, true)}</h5>
+                    <small>${stats.best_day.date}</small>
+                </div>
+                <div class="col-md-3">
+                    <small class="text-muted">Worst Day</small>
+                    <h5 class="text-danger">${formatISK(stats.worst_day.amount, true)}</h5>
+                    <small>${stats.worst_day.date}</small>
+                </div>
+                <div class="col-md-3">
+                    <small class="text-muted">Positive/Negative Days</small>
+                    <h5>
+                        <span class="text-success">${stats.days_positive}</span> / 
+                        <span class="text-danger">${stats.days_negative}</span>
+                    </h5>
+                </div>
+            </div>
+        `;
+        statsContainer.innerHTML = html;
+    }
 }
 
 // Refresh all data
