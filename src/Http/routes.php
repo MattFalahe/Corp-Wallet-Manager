@@ -76,6 +76,10 @@ Route::group([
     Route::get('/api/analytics/financial-ratios', 'AnalyticsController@financialRatios')
         ->name('corpwalletmanager.analytics.financial-ratios')
         ->middleware('can:corpwalletmanager.director_view');
+
+    Route::get('/api/analytics/daily-cashflow', 'AnalyticsController@dailyCashFlow')
+        ->name('corpwalletmanager.analytics.daily-cashflow')
+        ->middleware('can:corpwalletmanager.director_view');
     
     // Trends Tab Routes
     Route::get('/api/analytics/activity-heatmap', 'AnalyticsController@activityHeatmap')
