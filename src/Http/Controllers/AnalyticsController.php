@@ -32,6 +32,126 @@ class AnalyticsController extends Controller
     }
 
     /**
+    * Get Daily Cash Flow Data
+    */
+    public function dailyCashFlow(Request $request)
+    {
+        try {
+            $corporationId = $this->getCorporationId($request);
+            $days = min(max((int)$request->get('days', 30), 7), 90); // Between 7 and 90 days
+        
+            $startDate = Carbon::now()->subDays($days);
+        
+            $query = DB::table('corporation_wallet_journals')
+                ->whereDate('date', '>=', $startDate)
+                ->selectRaw('
+                    DATE(date) as day,
+                    SUM(CASE WHEN amount > 0 THEN amount ELSE 0 END) as daily_income,
+                    SUM(CASE WHEN amount < 0 THEN ABS(amount) ELSE 0 END) as daily_expenses,
+                    SUM(amount) as net_flow,
+                    COUNT(*) as transaction_count
+                ')
+                ->groupBy('day')
+                ->orderBy('day');
+        
+            if ($corporationId && is_numeric($corporationId)) {
+                $query->where('corporation_id', $corporationId);
+            }
+        
+            $dailyData = $query->get();
+        
+            // Format for chart
+            $labels = [];
+            $income = [];
+            $expenses = [];
+            $netFlow = [];
+            $cumulative = 0;
+            $cumulativeFlow = [];
+        
+            foreach ($dailyData as $day) {
+                // Format date for display
+                $labels[] = Carbon::parse($day->day)->format('M d');
+                $income[] = (float)$day->daily_income;
+                $expenses[] = -(float)$day->daily_expenses; // Negative for display
+                $netFlow[] = (float)$day->net_flow;
+            
+                // Calculate cumulative flow
+                $cumulative += (float)$day->net_flow;
+                $cumulativeFlow[] = $cumulative;
+            }
+        
+            // Calculate statistics
+            $totalIncome = array_sum($income);
+            $totalExpenses = abs(array_sum($expenses));
+            $avgDailyFlow = count($netFlow) > 0 ? array_sum($netFlow) / count($netFlow) : 0;
+            $bestDay = count($netFlow) > 0 ? max($netFlow) : 0;
+            $worstDay = count($netFlow) > 0 ? min($netFlow) : 0;
+        
+            // Find best and worst day dates
+            $bestDayDate = null;
+            $worstDayDate = null;
+            foreach ($dailyData as $index => $day) {
+                if ((float)$day->net_flow == $bestDay) {
+                    $bestDayDate = Carbon::parse($day->day)->format('M d, Y');
+                }
+                if ((float)$day->net_flow == $worstDay) {
+                    $worstDayDate = Carbon::parse($day->day)->format('M d, Y');
+                }
+            }
+        
+            return response()->json([
+                'labels' => $labels,
+                'datasets' => [
+                    'income' => $income,
+                    'expenses' => $expenses,
+                    'net_flow' => $netFlow,
+                    'cumulative' => $cumulativeFlow
+                ],
+                'statistics' => [
+                    'total_income' => $totalIncome,
+                    'total_expenses' => $totalExpenses,
+                    'net_total' => $totalIncome - $totalExpenses,
+                    'average_daily_flow' => round($avgDailyFlow, 2),
+                    'best_day' => [
+                        'amount' => $bestDay,
+                        'date' => $bestDayDate
+                    ],
+                    'worst_day' => [
+                        'amount' => $worstDay,
+                        'date' => $worstDayDate
+                    ],
+                    'days_positive' => count(array_filter($netFlow, function($v) { return $v > 0; })),
+                    'days_negative' => count(array_filter($netFlow, function($v) { return $v < 0; })),
+                    'days_total' => count($netFlow)
+                ],
+                'period' => [
+                    'start' => $startDate->format('Y-m-d'),
+                    'end' => Carbon::now()->format('Y-m-d'),
+                    'days' => $days
+                ],
+                'corporation_id' => $corporationId
+            ]);
+        
+        } catch (\Exception $e) {
+            Log::error('AnalyticsController dailyCashFlow error', [
+                'error' => $e->getMessage(),
+                'corporation_id' => $request->get('corporation_id')
+            ]);
+        
+            return response()->json([
+                'error' => 'Unable to fetch daily cash flow data',
+                'labels' => [],
+                'datasets' => [
+                    'income' => [],
+                    'expenses' => [],
+                    'net_flow' => [],
+                    'cumulative' => []
+                ]
+            ], 500);
+        }
+    }
+
+    /**
      * Calculate Financial Health Score
      */
     public function healthScore(Request $request)
