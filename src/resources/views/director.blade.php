@@ -465,7 +465,7 @@
                         <div class="col-12">
                             <div class="card">
                                 <div class="card-header">
-                                    <h3 class="card-title">Detailed Cash Flow Analysis</h3>
+                                    <h3 class="card-title">Cash Flow Waterfall Chart</h3>
                                 </div>
                                 <div class="card-body">
                                     <canvas id="cashflow-waterfall" height="300"></canvas>
@@ -498,7 +498,7 @@
                         <div class="col-md-4">
                             <div class="card">
                                 <div class="card-header">
-                                    <h3 class="card-title">Net Flow</h3>
+                                    <h3 class="card-title">Net Flow Summary</h3>
                                 </div>
                                 <div class="card-body">
                                     <div class="text-center">
@@ -507,8 +507,32 @@
                                     </div>
                                     <hr>
                                     <div id="flow-breakdown">
-                                        <!-- Will be populated -->
+                                        <div class="mb-2">
+                                            <span class="text-success">Income:</span>
+                                            <span class="float-right" id="total-income">0 ISK</span>
+                                        </div>
+                                        <div class="mb-2">
+                                            <span class="text-danger">Expenses:</span>
+                                            <span class="float-right" id="total-expenses">0 ISK</span>
+                                        </div>
+                                        <div class="mb-2">
+                                            <strong>Net:</strong>
+                                            <strong class="float-right" id="net-difference">0 ISK</strong>
+                                        </div>
                                     </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="row mt-3">
+                        <div class="col-12">
+                            <div class="card">
+                                <div class="card-header">
+                                    <h3 class="card-title">Daily Cash Flow Trend</h3>
+                                </div>
+                                <div class="card-body">
+                                    <canvas id="daily-cashflow-chart" height="200"></canvas>
                                 </div>
                             </div>
                         </div>
@@ -633,6 +657,10 @@ let incomeExpenseChart = null;
 let predictionChart = null;
 let incomeBreakdownChart = null;
 let expenseBreakdownChart = null;
+let cashflowWaterfallChart = null;
+let incomeCategoriesDetailedChart = null;
+let expenseCategoriesDetailedChart = null;
+let dailyCashflowChart = null;
 let currentChartMode = 'flow';
 
 // Helper function to build URLs
@@ -1141,6 +1169,274 @@ function updateBalanceChart(mode) {
     loadBalanceChart(mode);
 }
 
+// Cash Flow Tab Functions
+function loadCashFlowData() {
+    loadCashFlowWaterfall();
+    loadIncomeCategoriesDetailed();
+    loadExpenseCategoriesDetailed();
+    loadNetFlowSummary();
+    loadDailyCashFlowTrend();
+}
+
+function loadCashFlowWaterfall() {
+    fetch(buildUrl(addCorpParam('/corp-wallet-manager/api/income-expense?months=1')))
+        .then(response => response.json())
+        .then(data => {
+            const ctx = document.getElementById('cashflow-waterfall');
+            if (!ctx) return;
+            
+            if (cashflowWaterfallChart) {
+                cashflowWaterfallChart.destroy();
+            }
+            
+            // Prepare waterfall data
+            const startBalance = 1000000000; // Example starting balance
+            const income = data.income && data.income[0] ? data.income[0] : 0;
+            const expenses = data.expenses && data.expenses[0] ? data.expenses[0] : 0;
+            const endBalance = startBalance + income - expenses;
+            
+            cashflowWaterfallChart = new Chart(ctx.getContext('2d'), {
+                type: 'bar',
+                data: {
+                    labels: ['Starting Balance', 'Income', 'Expenses', 'Ending Balance'],
+                    datasets: [{
+                        label: 'Cash Flow',
+                        data: [startBalance, income, -expenses, endBalance],
+                        backgroundColor: [
+                            '#3b82f6',
+                            '#10b981',
+                            '#ef4444',
+                            endBalance > startBalance ? '#10b981' : '#ef4444'
+                        ],
+                        borderColor: '#1f2937',
+                        borderWidth: 1
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    plugins: {
+                        legend: { display: false },
+                        tooltip: {
+                            callbacks: {
+                                label: function(context) {
+                                    return formatISK(Math.abs(context.parsed.y));
+                                }
+                            }
+                        }
+                    },
+                    scales: {
+                        y: {
+                            beginAtZero: true,
+                            ticks: {
+                                callback: function(value) {
+                                    return formatISK(value, true).replace(' ISK', '');
+                                }
+                            }
+                        }
+                    }
+                }
+            });
+        })
+        .catch(error => {
+            console.error('Error loading cash flow waterfall:', error);
+        });
+}
+
+function loadIncomeCategoriesDetailed() {
+    fetch(buildUrl(addCorpParam('/corp-wallet-manager/api/transaction-breakdown?type=income&months=1')))
+        .then(response => response.json())
+        .then(data => {
+            const ctx = document.getElementById('income-categories-detailed');
+            if (!ctx) return;
+            
+            if (incomeCategoriesDetailedChart) {
+                incomeCategoriesDetailedChart.destroy();
+            }
+            
+            const colors = ['#10b981', '#3b82f6', '#8b5cf6', '#ec4899', '#f59e0b'];
+            
+            incomeCategoriesDetailedChart = new Chart(ctx.getContext('2d'), {
+                type: 'pie',
+                data: {
+                    labels: data.labels ? data.labels.slice(0, 5) : [],
+                    datasets: [{
+                        data: data.values ? data.values.slice(0, 5) : [],
+                        backgroundColor: colors,
+                        borderWidth: 2,
+                        borderColor: '#fff'
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    plugins: {
+                        legend: {
+                            position: 'bottom',
+                            labels: {
+                                padding: 10,
+                                font: { size: 10 }
+                            }
+                        },
+                        tooltip: {
+                            callbacks: {
+                                label: function(context) {
+                                    return context.label + ': ' + formatISK(context.parsed, true);
+                                }
+                            }
+                        }
+                    }
+                }
+            });
+        })
+        .catch(error => {
+            console.error('Error loading income categories:', error);
+        });
+}
+
+function loadExpenseCategoriesDetailed() {
+    fetch(buildUrl(addCorpParam('/corp-wallet-manager/api/transaction-breakdown?type=expense&months=1')))
+        .then(response => response.json())
+        .then(data => {
+            const ctx = document.getElementById('expense-categories-detailed');
+            if (!ctx) return;
+            
+            if (expenseCategoriesDetailedChart) {
+                expenseCategoriesDetailedChart.destroy();
+            }
+            
+            const colors = ['#ef4444', '#f97316', '#f59e0b', '#eab308', '#84cc16'];
+            
+            expenseCategoriesDetailedChart = new Chart(ctx.getContext('2d'), {
+                type: 'pie',
+                data: {
+                    labels: data.labels ? data.labels.slice(0, 5) : [],
+                    datasets: [{
+                        data: data.values ? data.values.slice(0, 5) : [],
+                        backgroundColor: colors,
+                        borderWidth: 2,
+                        borderColor: '#fff'
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    plugins: {
+                        legend: {
+                            position: 'bottom',
+                            labels: {
+                                padding: 10,
+                                font: { size: 10 }
+                            }
+                        },
+                        tooltip: {
+                            callbacks: {
+                                label: function(context) {
+                                    return context.label + ': ' + formatISK(context.parsed, true);
+                                }
+                            }
+                        }
+                    }
+                }
+            });
+        })
+        .catch(error => {
+            console.error('Error loading expense categories:', error);
+        });
+}
+
+function loadNetFlowSummary() {
+    fetch(buildUrl(addCorpParam('/corp-wallet-manager/api/income-expense?months=1')))
+        .then(response => response.json())
+        .then(data => {
+            const income = data.income && data.income[0] ? data.income[0] : 0;
+            const expenses = data.expenses && data.expenses[0] ? data.expenses[0] : 0;
+            const net = income - expenses;
+            
+            document.getElementById('total-income').textContent = formatISK(income, true);
+            document.getElementById('total-expenses').textContent = formatISK(expenses, true);
+            document.getElementById('net-difference').textContent = formatISK(net, true);
+            document.getElementById('net-flow-total').textContent = formatISK(net, true);
+            
+            // Color code the net flow
+            const netEl = document.getElementById('net-difference');
+            if (net > 0) {
+                netEl.className = 'float-right text-success';
+            } else if (net < 0) {
+                netEl.className = 'float-right text-danger';
+            } else {
+                netEl.className = 'float-right';
+            }
+        })
+        .catch(error => {
+            console.error('Error loading net flow summary:', error);
+        });
+}
+
+function loadDailyCashFlowTrend() {
+    // This would need a new API endpoint for daily data
+    // For now, we'll use monthly data as a placeholder
+    fetch(buildUrl(addCorpParam('/corp-wallet-manager/api/income-expense?months=6')))
+        .then(response => response.json())
+        .then(data => {
+            const ctx = document.getElementById('daily-cashflow-chart');
+            if (!ctx) return;
+            
+            if (dailyCashflowChart) {
+                dailyCashflowChart.destroy();
+            }
+            
+            // Calculate net flow for each period
+            const netFlowData = [];
+            if (data.income && data.expenses) {
+                for (let i = 0; i < data.income.length; i++) {
+                    netFlowData.push((data.income[i] || 0) - (data.expenses[i] || 0));
+                }
+            }
+            
+            dailyCashflowChart = new Chart(ctx.getContext('2d'), {
+                type: 'bar',
+                data: {
+                    labels: data.labels || [],
+                    datasets: [{
+                        label: 'Net Cash Flow',
+                        data: netFlowData,
+                        backgroundColor: netFlowData.map(v => v >= 0 ? '#10b981' : '#ef4444'),
+                        borderColor: '#1f2937',
+                        borderWidth: 1
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    plugins: {
+                        legend: { display: false },
+                        tooltip: {
+                            callbacks: {
+                                label: function(context) {
+                                    return 'Net Flow: ' + formatISK(context.parsed.y);
+                                }
+                            }
+                        }
+                    },
+                    scales: {
+                        y: {
+                            beginAtZero: true,
+                            ticks: {
+                                callback: function(value) {
+                                    return formatISK(value, true).replace(' ISK', '');
+                                }
+                            }
+                        }
+                    }
+                }
+            });
+        })
+        .catch(error => {
+            console.error('Error loading daily cash flow trend:', error);
+        });
+}
+
 // Refresh all data
 function refreshData() {
     // Load Overview tab data
@@ -1175,7 +1471,7 @@ function refreshData() {
     }
 }
 
-// Analytics Tab Functions
+// Analytics Tab Functions (keeping existing)
 function loadAnalyticsData() {
     calculateHealthScore();
     calculateBurnRate();
@@ -1191,14 +1487,10 @@ function calculateHealthScore() {
                 return;
             }
             
-            // Update score display
             document.getElementById('health-score').textContent = data.score + '/100';
-            
-            // Update progress bar
             const bar = document.getElementById('health-bar');
             bar.style.width = data.score + '%';
             
-            // Set color based on score
             let barClass = 'progress-bar ';
             if (data.score >= 80) {
                 barClass += 'bg-success';
@@ -1211,7 +1503,6 @@ function calculateHealthScore() {
             }
             bar.className = barClass;
             
-            // Update details
             let detailsHtml = `
                 <p>Balance Stability: <strong>${data.components.balance_stability}%</strong></p>
                 <p>Income Consistency: <strong>${data.components.income_consistency}%</strong></p>
@@ -1236,22 +1527,18 @@ function calculateBurnRate() {
                 return;
             }
             
-            // Update burn rate displays
             document.getElementById('daily-burn').textContent = formatISK(Math.abs(data.burn_rates.daily), true);
             document.getElementById('daily-burn').className = data.burn_rates.daily > 0 ? 'text-danger' : 'text-success';
             
-            // Days remaining
             const daysText = data.days_of_cash >= 999 ? '999+ days' : data.days_of_cash + ' days';
             document.getElementById('days-remaining').textContent = daysText;
             document.getElementById('days-remaining').className = 
                 data.days_of_cash > 90 ? 'text-success' : 
                 data.days_of_cash > 30 ? 'text-warning' : 'text-danger';
             
-            // Averages
             document.getElementById('weekly-avg').textContent = formatISK(Math.abs(data.burn_rates.weekly * 7), true);
             document.getElementById('monthly-avg').textContent = formatISK(Math.abs(data.burn_rates.monthly * 30), true);
             
-            // Add runway date if available
             if (data.runway_date) {
                 document.getElementById('days-remaining').innerHTML += 
                     `<br><small class="text-muted">Until: ${data.runway_date}</small>`;
@@ -1271,7 +1558,6 @@ function calculateFinancialRatios() {
                 return;
             }
             
-            // Update ratio displays
             document.getElementById('liquidity-ratio').textContent = data.liquidity_ratio.toFixed(2);
             
             const growthEl = document.getElementById('growth-rate');
@@ -1280,10 +1566,6 @@ function calculateFinancialRatios() {
             
             document.getElementById('income-expense-ratio').textContent = data.income_expense_ratio.toFixed(2);
             document.getElementById('volatility').textContent = data.volatility + '%';
-            
-            // Update ratio cards with interpretations
-            const cards = document.querySelectorAll('.info-box');
-            // Add interpretation badges or tooltips based on data.interpretations
         })
         .catch(error => {
             console.error('Error loading financial ratios:', error);
@@ -1306,20 +1588,9 @@ function loadActivityHeatmap() {
                 return;
             }
             
-            // Create heatmap visualization
             const container = document.getElementById('activity-heatmap');
             let html = '<div class="heatmap-grid">';
             
-            // Group by weeks for calendar view
-            const weeks = {};
-            data.heatmap.forEach(day => {
-                const date = new Date(day.date);
-                const weekNum = Math.floor((date.getDate() - 1) / 7);
-                if (!weeks[weekNum]) weeks[weekNum] = [];
-                weeks[weekNum].push(day);
-            });
-            
-            // Simple grid representation
             html += '<div class="row">';
             data.heatmap.forEach(day => {
                 const colorClass = day.value > 0 ? 'bg-success' : day.value < 0 ? 'bg-danger' : 'bg-secondary';
@@ -1332,7 +1603,6 @@ function loadActivityHeatmap() {
             });
             html += '</div>';
             
-            // Add summary
             html += `
                 <div class="mt-3">
                     <small class="text-muted">
@@ -1359,7 +1629,6 @@ function loadBestWorstDays() {
                 return;
             }
             
-            // Update best days list
             let bestHtml = '';
             data.best_days.forEach((day, index) => {
                 bestHtml += `
@@ -1371,7 +1640,6 @@ function loadBestWorstDays() {
             });
             document.getElementById('best-days').innerHTML = bestHtml || '<li class="text-muted">No data available</li>';
             
-            // Update worst days list
             let worstHtml = '';
             data.worst_days.forEach((day, index) => {
                 worstHtml += `
@@ -1457,7 +1725,6 @@ function loadWeeklyPatterns() {
                 }
             });
             
-            // Add best/worst day info
             if (data.best_day) {
                 const info = document.createElement('div');
                 info.className = 'mt-2 text-center';
@@ -1489,7 +1756,6 @@ function loadDivisionPerformance() {
                 return;
             }
             
-            // Update division performance table
             let tableHtml = '';
             data.divisions.forEach(div => {
                 const trendIcon = div.trend === 'up' ? 
@@ -1514,7 +1780,6 @@ function loadDivisionPerformance() {
             document.getElementById('division-performance').innerHTML = 
                 tableHtml || '<tr><td colspan="7" class="text-center text-muted">No performance data available</td></tr>';
             
-            // Update top income sources and expense categories
             if (data.summary && data.summary.best_performer) {
                 document.getElementById('top-income-sources').innerHTML = `
                     <li><strong>Best Performer:</strong> ${data.summary.best_performer.name}</li>
@@ -1551,21 +1816,18 @@ function generateExecutiveSummary() {
                 return;
             }
             
-            // Update insights
             let insightsHtml = '';
             data.insights.forEach(insight => {
                 insightsHtml += `<li>${insight}</li>`;
             });
             document.getElementById('key-insights').innerHTML = insightsHtml || '<li>No insights available</li>';
             
-            // Update recommendations
             let recommendationsHtml = '';
             data.recommendations.forEach(rec => {
                 recommendationsHtml += `<li>${rec}</li>`;
             });
             document.getElementById('recommendations').innerHTML = recommendationsHtml || '<li>No recommendations at this time</li>';
             
-            // Update risk assessment
             let riskClass = 'alert-info';
             if (data.risk_assessment.level === 'Critical') riskClass = 'alert-danger';
             else if (data.risk_assessment.level === 'High') riskClass = 'alert-warning';
@@ -1593,7 +1855,6 @@ function populateReportMonths() {
     const select = document.getElementById('report-month');
     if (!select) return;
     
-    // Generate last 12 months
     let html = '';
     for (let i = 0; i < 12; i++) {
         const date = new Date();
