@@ -15,7 +15,7 @@ Route::group([
     Route::get('/member', 'WalletController@member')
         ->name('corpwalletmanager.member')
         ->middleware('can:corpwalletmanager.member_view');
-    
+ 
     // API endpoints for data
     Route::get('/api/latest', 'WalletController@latest')
         ->name('corpwalletmanager.latest')
@@ -36,6 +36,73 @@ Route::group([
     Route::get('/api/summary', 'WalletController@summary')
         ->name('corpwalletmanager.summary')
         ->middleware('can:corpwalletmanager.view');
+
+    Route::get('/api/wallet-actual', 'WalletController@walletActual')
+        ->name('corpwalletmanager.wallet-actual')
+        ->middleware('can:corpwalletmanager.director_view');
+
+    // New APIs for Director View data
+    Route::get('/api/today', 'WalletController@today')
+        ->name('corpwalletmanager.today')
+        ->middleware('can:corpwalletmanager.view');
+
+    Route::get('/api/division-current', 'WalletController@divisionCurrent')
+        ->name('corpwalletmanager.division-current')
+        ->middleware('can:corpwalletmanager.director_view');
+
+    Route::get('/api/balance-history', 'WalletController@balanceHistory')
+        ->name('corpwalletmanager.balance-history')
+        ->middleware('can:corpwalletmanager.director_view');
+
+    Route::get('/api/income-expense', 'WalletController@incomeExpense')
+        ->name('corpwalletmanager.income-expense')
+        ->middleware('can:corpwalletmanager.director_view');
+
+    Route::get('/api/transaction-breakdown', 'WalletController@transactionBreakdown')
+        ->name('corpwalletmanager.transaction-breakdown')
+        ->middleware('can:corpwalletmanager.director_view');
+    
+    // ===== NEW ANALYTICS ROUTES =====
+    
+    // Analytics Tab Routes
+    Route::get('/api/analytics/health-score', 'AnalyticsController@healthScore')
+        ->name('corpwalletmanager.analytics.health-score')
+        ->middleware('can:corpwalletmanager.director_view');
+    
+    Route::get('/api/analytics/burn-rate', 'AnalyticsController@burnRate')
+        ->name('corpwalletmanager.analytics.burn-rate')
+        ->middleware('can:corpwalletmanager.director_view');
+    
+    Route::get('/api/analytics/financial-ratios', 'AnalyticsController@financialRatios')
+        ->name('corpwalletmanager.analytics.financial-ratios')
+        ->middleware('can:corpwalletmanager.director_view');
+
+    Route::get('/api/analytics/daily-cashflow', 'AnalyticsController@dailyCashFlow')
+        ->name('corpwalletmanager.analytics.daily-cashflow')
+        ->middleware('can:corpwalletmanager.director_view');
+    
+    // Trends Tab Routes
+    Route::get('/api/analytics/activity-heatmap', 'AnalyticsController@activityHeatmap')
+        ->name('corpwalletmanager.analytics.activity-heatmap')
+        ->middleware('can:corpwalletmanager.director_view');
+    
+    Route::get('/api/analytics/best-worst-days', 'AnalyticsController@bestWorstDays')
+        ->name('corpwalletmanager.analytics.best-worst-days')
+        ->middleware('can:corpwalletmanager.director_view');
+    
+    Route::get('/api/analytics/weekly-patterns', 'AnalyticsController@weeklyPatterns')
+        ->name('corpwalletmanager.analytics.weekly-patterns')
+        ->middleware('can:corpwalletmanager.director_view');
+    
+    // Performance Tab Routes
+    Route::get('/api/analytics/division-performance', 'AnalyticsController@divisionPerformance')
+        ->name('corpwalletmanager.analytics.division-performance')
+        ->middleware('can:corpwalletmanager.director_view');
+    
+    // Reports Tab Routes
+    Route::get('/api/analytics/executive-summary', 'AnalyticsController@executiveSummary')
+        ->name('corpwalletmanager.analytics.executive-summary')
+        ->middleware('can:corpwalletmanager.director_view');
     
     // Settings routes
     Route::get('/settings', 'SettingsController@index')
@@ -70,4 +137,9 @@ Route::group([
     Route::get('/settings/job-status', 'SettingsController@jobStatus')
         ->name('corpwalletmanager.settings.job-status')
         ->middleware('can:corpwalletmanager.settings');
+    
+    // New route for getting selected corporation settings
+    Route::get('/api/selected-corporation', 'SettingsController@getSelectedCorporation')
+        ->name('corpwalletmanager.selected-corporation')
+        ->middleware('can:corpwalletmanager.view');
 });

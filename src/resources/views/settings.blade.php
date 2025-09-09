@@ -7,7 +7,19 @@
     <div class="col-12">
         @if(session('success'))
             <div class="alert alert-success">
-                {{ session('success') }}
+                <i class="fas fa-check-circle"></i> {{ session('success') }}
+            </div>
+        @endif
+
+        @if(session('warning'))
+            <div class="alert alert-warning">
+                <i class="fas fa-exclamation-triangle"></i> {{ session('warning') }}
+            </div>
+        @endif
+
+        @if(session('error'))
+            <div class="alert alert-danger">
+                <i class="fas fa-times-circle"></i> {{ session('error') }}
             </div>
         @endif
 
@@ -34,11 +46,29 @@
                             <h5>Display Settings</h5>
                             
                             <div class="form-group">
-                                <label for="refresh_interval">Chart Refresh Interval (ms)</label>
-                                <input type="number" class="form-control" id="refresh_interval" 
-                                       name="refresh_interval" value="{{ $settings['refresh_interval'] }}" 
-                                       min="5000" max="300000" step="1000">
-                                <small class="text-muted">How often charts update (5000-300000ms)</small>
+                                <label for="selected_corporation_id">Corporation</label>
+                                <select class="form-control" id="selected_corporation_id" name="selected_corporation_id">
+                                    <option value="">All Corporations</option>
+                                    @foreach($corporations as $corp)
+                                        <option value="{{ $corp->corporation_id }}" 
+                                                {{ $settings['selected_corporation_id'] == $corp->corporation_id ? 'selected' : '' }}>
+                                            {{ $corp->name }} ({{ $corp->corporation_id }})
+                                        </option>
+                                    @endforeach
+                                </select>
+                                <small class="text-muted">Select which corporation to display data for</small>
+                            </div>
+
+                            <div class="form-group">
+                                <label for="refresh_minutes">Chart Refresh Interval</label>
+                                <select class="form-control" id="refresh_minutes" name="refresh_minutes">
+                                    <option value="0" {{ $settings['refresh_minutes'] == '0' ? 'selected' : '' }}>No Auto Refresh</option>
+                                    <option value="5" {{ $settings['refresh_minutes'] == '5' ? 'selected' : '' }}>5 Minutes</option>
+                                    <option value="15" {{ $settings['refresh_minutes'] == '15' ? 'selected' : '' }}>15 Minutes</option>
+                                    <option value="30" {{ $settings['refresh_minutes'] == '30' ? 'selected' : '' }}>30 Minutes</option>
+                                    <option value="60" {{ $settings['refresh_minutes'] == '60' ? 'selected' : '' }}>60 Minutes</option>
+                                </select>
+                                <small class="text-muted">How often charts update automatically</small>
                             </div>
 
                             <div class="form-group">
@@ -99,6 +129,15 @@
                                     </small>
                                 </div>
                             </div>
+
+                            <div class="alert alert-info">
+                                <i class="fas fa-info-circle"></i> <strong>Corporation Selection:</strong>
+                                <ul class="mb-0 mt-2">
+                                    <li>Select a specific corporation to view only their data</li>
+                                    <li>Choose "All Corporations" to see aggregate data</li>
+                                    <li>This affects all views and maintenance jobs</li>
+                                </ul>
+                            </div>
                         </div>
                     </div>
 
@@ -120,9 +159,24 @@
         <div class="card mt-3">
             <div class="card-header">
                 <h3 class="card-title">Maintenance</h3>
+                <div class="card-tools">
+                    <span class="badge badge-info" id="selected-corp-badge">
+                        @if($settings['selected_corporation_id'])
+                            Corp ID: {{ $settings['selected_corporation_id'] }}
+                        @else
+                            All Corporations
+                        @endif
+                    </span>
+                </div>
             </div>
             <div class="card-body">
-                <p>Use these tools to manually trigger data processing jobs.</p>
+                <p>Use these tools to manually trigger data processing jobs. 
+                   @if($settings['selected_corporation_id'])
+                       <strong>Jobs will run for Corporation ID: {{ $settings['selected_corporation_id'] }}</strong>
+                   @else
+                       <strong>Jobs will run for all corporations.</strong>
+                   @endif
+                </p>
                 
                 <div class="row">
                     <div class="col-md-6">
@@ -165,8 +219,16 @@
         <div class="card mt-3">
             <div class="card-header">
                 <h3 class="card-title">Job Status</h3>
+                <div class="card-tools">
+                    <button type="button" class="btn btn-sm btn-tool" onclick="refreshJobStatus()">
+                        <i class="fas fa-sync-alt"></i> Refresh
+                    </button>
+                </div>
             </div>
             <div class="card-body">
+                <div id="running-jobs-alert" class="alert alert-warning d-none">
+                    <i class="fas fa-spinner fa-spin"></i> <span id="running-count">0</span> job(s) currently running...
+                </div>
                 <div class="table-responsive">
                     <table class="table table-striped">
                         <thead>
@@ -179,7 +241,7 @@
                                 <th>Corporation</th>
                             </tr>
                         </thead>
-                        <tbody>
+                        <tbody id="job-status-table">
                             @forelse($recentLogs as $log)
                                 <tr>
                                     <td>{{ $log->job_type_display }}</td>
@@ -211,10 +273,22 @@
         </div>
     </div>
 </div>
-@endsection
 
-@section('scripts')
 <script>
+// Fix SeAT's mixed content issue first
+(function() {
+    // Wait for jQuery to be available
+    if (typeof $ !== 'undefined' && $.ajax) {
+        var originalAjax = $.ajax;
+        $.ajax = function(settings) {
+            if (settings && settings.url && typeof settings.url === 'string' && settings.url.startsWith('http://')) {
+                settings.url = settings.url.replace('http://', 'https://');
+            }
+            return originalAjax.call(this, settings);
+        };
+    }
+})();
+    
 function resetSettings() {
     if (confirm('Are you sure you want to reset all settings to defaults? This cannot be undone.')) {
         const form = document.createElement('form');
@@ -232,17 +306,58 @@ function resetSettings() {
     }
 }
 
-// Auto-refresh job status every 30 seconds
-setInterval(function() {
+function refreshJobStatus() {
     fetch('{{ route("corpwalletmanager.settings.job-status") }}')
         .then(response => response.json())
         .then(data => {
-            // Update running jobs count if you want to show it somewhere
-            console.log('Running jobs:', data.running_jobs);
+            // Update running jobs alert
+            const alertDiv = document.getElementById('running-jobs-alert');
+            const runningCount = document.getElementById('running-count');
+            
+            if (data.running_jobs > 0) {
+                alertDiv.classList.remove('d-none');
+                runningCount.textContent = data.running_jobs;
+            } else {
+                alertDiv.classList.add('d-none');
+            }
+            
+            // Update job table if we have recent jobs
+            if (data.recent_jobs && data.recent_jobs.length > 0) {
+                const tbody = document.getElementById('job-status-table');
+                let html = '';
+                
+                data.recent_jobs.forEach(job => {
+                    let badgeClass = 'badge-secondary';
+                    if (job.status === 'running') badgeClass = 'badge-warning';
+                    else if (job.status === 'completed') badgeClass = 'badge-success';
+                    else if (job.status === 'failed') badgeClass = 'badge-danger';
+                    
+                    html += `
+                        <tr>
+                            <td>${job.job_type}</td>
+                            <td><span class="badge ${badgeClass}">${job.status}</span></td>
+                            <td>${job.started_at}</td>
+                            <td>${job.duration}</td>
+                            <td>${job.records_processed.toLocaleString()}</td>
+                            <td>${job.corporation_id || 'All'}</td>
+                        </tr>
+                    `;
+                });
+                
+                tbody.innerHTML = html;
+            }
         })
         .catch(error => {
             console.error('Error fetching job status:', error);
         });
-}, 30000);
+}
+
+// Auto-refresh job status every 30 seconds
+setInterval(refreshJobStatus, 30000);
+
+// Initial load
+document.addEventListener('DOMContentLoaded', function() {
+    refreshJobStatus();
+});
 </script>
 @endsection

@@ -3,6 +3,7 @@
 namespace Seat\CorpWalletManager;
 
 use Seat\Services\AbstractSeatPlugin;
+use Illuminate\Console\Scheduling\Schedule;
 
 class CorpWalletManagerServiceProvider extends AbstractSeatPlugin
 {
@@ -16,6 +17,46 @@ class CorpWalletManagerServiceProvider extends AbstractSeatPlugin
         $this->loadTranslationsFrom(__DIR__ . '/resources/lang/', 'corpwalletmanager');
         $this->loadViewsFrom(__DIR__ . '/resources/views/', 'corpwalletmanager');
         $this->loadMigrationsFrom(__DIR__ . '/database/migrations/');
+
+         // Register scheduled tasks
+        $this->app->booted(function () {
+            $schedule = $this->app->make(Schedule::class);
+            
+            // Hourly wallet data update
+            $schedule->job(new \Seat\CorpWalletManager\Jobs\UpdateHourlyWalletData)
+                ->hourly()
+                ->withoutOverlapping()
+                ->name('corpwallet:hourly-update')
+                ->description('Update corporation wallet data for the last hour');
+            
+            // Compute predictions every 6 hours
+            $schedule->job(new \Seat\CorpWalletManager\Jobs\ComputeDailyPrediction)
+                ->everySixHours()
+                ->withoutOverlapping()
+                ->name('corpwallet:compute-predictions')
+                ->description('Compute wallet balance predictions');
+            
+            // Daily aggregation at 1 AM
+            $schedule->job(new \Seat\CorpWalletManager\Jobs\DailyAggregation)
+                ->dailyAt('01:00')
+                ->withoutOverlapping()
+                ->name('corpwallet:daily-aggregation')
+                ->description('Aggregate daily wallet statistics');
+            
+            // Weekly division calculations (Mondays at 2 AM)
+            $schedule->job(new \Seat\CorpWalletManager\Jobs\ComputeDivisionDailyPrediction)
+                ->weeklyOn(1, '02:00')
+                ->withoutOverlapping()
+                ->name('corpwallet:division-predictions')
+                ->description('Compute division wallet predictions');
+            
+            // Monthly full backfill (1st of month at 3 AM) - for data integrity
+            $schedule->job(new \Seat\CorpWalletManager\Jobs\BackfillWalletData(null, 1))
+                ->monthlyOn(1, '03:00')
+                ->withoutOverlapping()
+                ->name('corpwallet:monthly-backfill')
+                ->description('Monthly wallet data integrity check and backfill');
+        });
     }
 
     public function register()

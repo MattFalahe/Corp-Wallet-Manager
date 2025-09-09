@@ -3,6 +3,7 @@ namespace Seat\CorpWalletManager\Models;
 
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Support\Facades\Log;
+use Illuminate\Support\Facades\DB;
 
 class DivisionPrediction extends Model
 {
@@ -98,11 +99,43 @@ class DivisionPrediction extends Model
     }
     
     /**
-     * Get division name
+     * Get division name from corporation_divisions table
      */
     public function getDivisionNameAttribute()
     {
-        return "Division " . $this->division_id;
+        try {
+            // Try to get the actual division name from corporation_divisions
+            $division = DB::table('corporation_divisions')
+                ->where('corporation_id', $this->corporation_id)
+                ->where('division', $this->division_id)
+                ->first();
+            
+            if ($division && !empty($division->name)) {
+                return $division->name;
+            }
+            
+            // Fallback to default names
+            $defaultNames = [
+                1 => 'Master Wallet',
+                2 => '2nd Wallet Division',
+                3 => '3rd Wallet Division',
+                4 => '4th Wallet Division',
+                5 => '5th Wallet Division',
+                6 => '6th Wallet Division',
+                7 => '7th Wallet Division',
+            ];
+            
+            return $defaultNames[$this->division_id] ?? "Division {$this->division_id}";
+            
+        } catch (\Exception $e) {
+            Log::warning('DivisionPrediction: Failed to get division name', [
+                'corporation_id' => $this->corporation_id,
+                'division_id' => $this->division_id,
+                'error' => $e->getMessage()
+            ]);
+            
+            return "Division {$this->division_id}";
+        }
     }
     
     /**
@@ -115,5 +148,16 @@ class DivisionPrediction extends Model
         } catch (\Exception $e) {
             return null;
         }
+    }
+    
+    /**
+     * Get the actual division info from corporation_divisions
+     */
+    public function divisionInfo()
+    {
+        return DB::table('corporation_divisions')
+            ->where('corporation_id', $this->corporation_id)
+            ->where('division', $this->division_id)
+            ->first();
     }
 }
