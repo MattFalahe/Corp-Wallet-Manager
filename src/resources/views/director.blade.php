@@ -13,7 +13,7 @@
 
         <!-- Corporation Selector -->
         <div class="alert alert-info mb-3" id="corp-selector-info">
-            <i class="fas fa-info-circle"></i> 
+            <i class="fas fa-info-circle"></i>
             <span id="current-corp-display">Loading corporation settings...</span>
             <a href="{{ route('corpwalletmanager.settings') }}" class="float-right">
                 <i class="fas fa-cog"></i> Change in Settings
@@ -388,7 +388,12 @@
                                     <h3 class="card-title">Weekly Patterns</h3>
                                 </div>
                                 <div class="card-body">
-                                    <canvas id="weekly-pattern-chart" height="200"></canvas>
+                                    <div style="height: 400px; position: relative;">
+                                        <canvas id="weekly-pattern-chart"></canvas>
+                                    </div>
+                                    <div class="weekly-pattern-info mt-2 text-center">
+                                        <!-- Info will be populated here -->
+                                    </div>
                                 </div>
                             </div>
                         </div>
@@ -537,7 +542,9 @@
                                     </div>
                                 </div>
                                 <div class="card-body">
-                                    <canvas id="daily-cashflow-chart" height="200"></canvas>
+                                    <div style="height: 400px; position: relative;">
+                                        <canvas id="daily-cashflow-chart"></canvas>
+                                    </div>
                                     <div id="cashflow-statistics" class="mt-3">
                                         <!-- Statistics will be populated here -->
                                     </div>
@@ -569,12 +576,12 @@
                                         <ul id="key-insights">
                                             <li>Loading insights...</li>
                                         </ul>
-                                        
+
                                         <h4 class="mt-4">Recommendations</h4>
                                         <ul id="recommendations">
                                             <li>Loading recommendations...</li>
                                         </ul>
-                                        
+
                                         <h4 class="mt-4">Risk Assessment</h4>
                                         <div id="risk-assessment">
                                             <p class="text-muted">Analyzing risks...</p>
@@ -715,17 +722,17 @@ function loadCorporationSettings() {
         .then(data => {
             config.corporationId = data.corporation_id;
             config.refreshInterval = data.refresh_interval;
-            
+
             // Update display
-            const displayText = config.corporationId 
-                ? `Viewing data for Corporation ID: ${config.corporationId}` 
+            const displayText = config.corporationId
+                ? `Viewing data for Corporation ID: ${config.corporationId}`
                 : 'Viewing data for all corporations';
-                
+
             document.getElementById('current-corp-display').textContent = displayText;
-            
+
             // Setup auto-refresh if enabled
             setupAutoRefresh(data.refresh_minutes);
-            
+
             // Load data with the correct corporation
             refreshData();
         })
@@ -744,7 +751,7 @@ function setupAutoRefresh(refreshMinutes) {
         clearInterval(config.refreshTimer);
         config.refreshTimer = null;
     }
-    
+
     // Set new timer if refresh is enabled
     if (refreshMinutes && refreshMinutes !== '0') {
         const intervalMs = parseInt(refreshMinutes) * 60 * 1000;
@@ -755,23 +762,48 @@ function setupAutoRefresh(refreshMinutes) {
     }
 }
 
-// Format ISK values
+// Enhanced ISK formatter that handles large numbers better
 function formatISK(value, compact = false) {
     if (!isFinite(value) || isNaN(value)) {
-        return '0.00 ISK';
+        return '0 ISK';
     }
-    
-    if (compact && Math.abs(value) > 1000000000) {
-        return (value / 1000000000).toFixed(2) + 'B ISK';
-    } else if (compact && Math.abs(value) > 1000000) {
-        return (value / 1000000).toFixed(2) + 'M ISK';
+
+    // For chart axis labels, use very compact format
+    if (compact) {
+        const absValue = Math.abs(value);
+        if (absValue >= 1000000000000) {
+            return (value / 1000000000000).toFixed(1) + 'T ISK';
+        } else if (absValue >= 1000000000) {
+            return (value / 1000000000).toFixed(1) + 'B ISK';
+        } else if (absValue >= 1000000) {
+            return (value / 1000000).toFixed(1) + 'M ISK';
+        } else if (absValue >= 1000) {
+            return (value / 1000).toFixed(1) + 'K ISK';
+        }
+        return value.toFixed(0) + ' ISK';
     }
-    
+
+    // For normal display, use full formatting
     return new Intl.NumberFormat('en-US', {
         style: 'decimal',
-        minimumFractionDigits: config.decimals,
+        minimumFractionDigits: 0,
         maximumFractionDigits: config.decimals
     }).format(value) + ' ISK';
+}
+
+// Special formatter for chart axes (even more compact)
+function formatAxisValue(value) {
+    const absValue = Math.abs(value);
+    if (absValue >= 1000000000000) {
+        return (value / 1000000000000).toFixed(0) + 'T';
+    } else if (absValue >= 1000000000) {
+        return (value / 1000000000).toFixed(0) + 'B';
+    } else if (absValue >= 1000000) {
+        return (value / 1000000).toFixed(0) + 'M';
+    } else if (absValue >= 1000) {
+        return (value / 1000).toFixed(0) + 'K';
+    }
+    return value.toFixed(0);
 }
 
 // Add corporation parameter to API calls
@@ -832,14 +864,14 @@ function loadDivisionBreakdown() {
                 tbody.innerHTML = '<tr><td colspan="4" class="text-center text-muted">No division data available</td></tr>';
                 return;
             }
-            
+
             let html = '';
             data.divisions.forEach(div => {
                 const changeClass = div.change >= 0 ? 'text-success' : 'text-danger';
                 const changeIcon = div.change >= 0 ? 'fa-arrow-up' : 'fa-arrow-down';
                 const statusClass = div.balance > 0 ? 'badge-success' : 'badge-warning';
                 const status = div.balance > 0 ? 'Healthy' : 'Low';
-                
+
                 html += `
                     <tr>
                         <td>${div.name}</td>
@@ -860,10 +892,10 @@ function loadDivisionBreakdown() {
 
 // Load balance history chart
 function loadBalanceChart(mode = 'flow') {
-    const endpoint = mode === 'actual' 
-        ? '/corp-wallet-manager/api/balance-history?months=12' 
+    const endpoint = mode === 'actual'
+        ? '/corp-wallet-manager/api/balance-history?months=12'
         : '/corp-wallet-manager/api/monthly-comparison?months=12';
-    
+
     fetch(buildUrl(addCorpParam(endpoint)))
         .then(response => response.json())
         .then(data => {
@@ -872,14 +904,14 @@ function loadBalanceChart(mode = 'flow') {
                 balanceChart.destroy();
                 balanceChart = null;
             }
-            
+
             const canvas = document.getElementById('balanceChart');
             const ctx = canvas.getContext('2d');
-            
+
             // Explicit height control
             canvas.parentNode.style.height = '400px';
             canvas.parentNode.style.width = '100%';
-            
+
             balanceChart = new Chart(ctx, {
                 type: 'line',
                 data: {
@@ -910,7 +942,7 @@ function loadBalanceChart(mode = 'flow') {
                         y: {
                             ticks: {
                                 callback: function(value) {
-                                    return formatISK(value, true).replace(' ISK', '');
+                                    return formatAxisValue(value);
                                 }
                             }
                         }
@@ -933,14 +965,14 @@ function loadIncomeExpenseChart() {
                 incomeExpenseChart.destroy();
                 incomeExpenseChart = null;
             }
-            
+
             const canvas = document.getElementById('incomeExpenseChart');
             const ctx = canvas.getContext('2d');
-            
+
             // Explicit height control
             canvas.parentNode.style.height = '400px';
             canvas.parentNode.style.width = '100%';
-            
+
             incomeExpenseChart = new Chart(ctx, {
                 type: 'line',
                 data: {
@@ -974,7 +1006,7 @@ function loadIncomeExpenseChart() {
                         intersect: false,
                     },
                     plugins: {
-                        legend: { 
+                        legend: {
                             position: 'top',
                             labels: {
                                 usePointStyle: true,
@@ -994,7 +1026,7 @@ function loadIncomeExpenseChart() {
                             beginAtZero: true,
                             ticks: {
                                 callback: function(value) {
-                                    return formatISK(value, true).replace(' ISK', '');
+                                    return formatAxisValue(value);
                                 }
                             }
                         }
@@ -1017,25 +1049,25 @@ function loadIncomeBreakdown() {
                 console.error('Income breakdown chart canvas not found');
                 return;
             }
-            
+
             // Destroy existing chart
             if (incomeBreakdownChart) {
                 incomeBreakdownChart.destroy();
                 incomeBreakdownChart = null;
             }
-            
+
             const ctx = canvas.getContext('2d');
-            
+
             // Explicit height control for pie chart
             canvas.parentNode.style.height = '300px';
             canvas.parentNode.style.width = '100%';
-            
+
             // Generate colors for each segment
             const colors = [
                 '#10b981', '#3b82f6', '#8b5cf6', '#ec4899', '#f59e0b',
                 '#06b6d4', '#84cc16', '#f97316', '#6366f1', '#14b8a6'
             ];
-            
+
             incomeBreakdownChart = new Chart(ctx, {
                 type: 'doughnut',
                 data: {
@@ -1068,7 +1100,7 @@ function loadIncomeBreakdown() {
                     }
                 }
             });
-            
+
             // Create detailed legend
             if (data.details && data.details.length > 0) {
                 const legendDiv = document.getElementById('income-legend');
@@ -1084,7 +1116,7 @@ function loadIncomeBreakdown() {
             console.error('Error loading income breakdown:', error);
         });
 }
-    
+
 // Load expense breakdown pie chart
 function loadExpenseBreakdown() {
     fetch(buildUrl(addCorpParam('/corp-wallet-manager/api/transaction-breakdown?type=expense')))
@@ -1095,25 +1127,25 @@ function loadExpenseBreakdown() {
                 console.error('Expense breakdown chart canvas not found');
                 return;
             }
-            
+
             // Destroy existing chart
             if (expenseBreakdownChart) {
                 expenseBreakdownChart.destroy();
                 expenseBreakdownChart = null;
             }
-            
+
             const ctx = canvas.getContext('2d');
-            
+
             // Explicit height control for pie chart
             canvas.parentNode.style.height = '300px';
             canvas.parentNode.style.width = '100%';
-            
+
             // Generate colors for each segment
             const colors = [
                 '#ef4444', '#f97316', '#f59e0b', '#eab308', '#84cc16',
                 '#22c55e', '#10b981', '#14b8a6', '#06b6d4', '#0ea5e9'
             ];
-            
+
             expenseBreakdownChart = new Chart(ctx, {
                 type: 'doughnut',
                 data: {
@@ -1146,7 +1178,7 @@ function loadExpenseBreakdown() {
                     }
                 }
             });
-            
+
             // Create detailed legend
             if (data.details && data.details.length > 0) {
                 const legendDiv = document.getElementById('expense-legend');
@@ -1173,21 +1205,21 @@ function loadPredictionChart() {
                 predictionChart.destroy();
                 predictionChart = null;
             }
-            
+
             const canvas = document.getElementById('predictionChart');
             const ctx = canvas.getContext('2d');
-            
+
             // Explicit height control
             canvas.parentNode.style.height = '150px';
             canvas.parentNode.style.width = '100%';
-            
+
             if (!data.data || data.data.length === 0) {
                 ctx.font = '20px Arial';
                 ctx.textAlign = 'center';
                 ctx.fillText('No prediction data available', canvas.width / 2, canvas.height / 2);
                 return;
             }
-            
+
             predictionChart = new Chart(ctx, {
                 type: 'line',
                 data: {
@@ -1219,7 +1251,7 @@ function loadPredictionChart() {
                         y: {
                             ticks: {
                                 callback: function(value) {
-                                    return formatISK(value, true).replace(' ISK', '');
+                                    return formatAxisValue(value);
                                 }
                             }
                         }
@@ -1258,11 +1290,11 @@ function calculateHealthScore() {
                 console.error('Health score error:', data.error);
                 return;
             }
-            
+
             document.getElementById('health-score').textContent = data.score + '/100';
             const bar = document.getElementById('health-bar');
             bar.style.width = data.score + '%';
-            
+
             let barClass = 'progress-bar ';
             if (data.score >= 80) {
                 barClass += 'bg-success';
@@ -1274,7 +1306,7 @@ function calculateHealthScore() {
                 barClass += 'bg-danger';
             }
             bar.className = barClass;
-            
+
             let detailsHtml = `
                 <p>Balance Stability: <strong>${data.components.balance_stability}%</strong></p>
                 <p>Income Consistency: <strong>${data.components.income_consistency}%</strong></p>
@@ -1298,21 +1330,21 @@ function calculateBurnRate() {
                 console.error('Burn rate error:', data.error);
                 return;
             }
-            
+
             document.getElementById('daily-burn').textContent = formatISK(Math.abs(data.burn_rates.daily), true);
             document.getElementById('daily-burn').className = data.burn_rates.daily > 0 ? 'text-danger' : 'text-success';
-            
+
             const daysText = data.days_of_cash >= 999 ? '999+ days' : data.days_of_cash + ' days';
             document.getElementById('days-remaining').textContent = daysText;
-            document.getElementById('days-remaining').className = 
-                data.days_of_cash > 90 ? 'text-success' : 
+            document.getElementById('days-remaining').className =
+                data.days_of_cash > 90 ? 'text-success' :
                 data.days_of_cash > 30 ? 'text-warning' : 'text-danger';
-            
+
             document.getElementById('weekly-avg').textContent = formatISK(Math.abs(data.burn_rates.weekly * 7), true);
             document.getElementById('monthly-avg').textContent = formatISK(Math.abs(data.burn_rates.monthly * 30), true);
-            
+
             if (data.runway_date) {
-                document.getElementById('days-remaining').innerHTML += 
+                document.getElementById('days-remaining').innerHTML +=
                     `<br><small class="text-muted">Until: ${data.runway_date}</small>`;
             }
         })
@@ -1329,13 +1361,13 @@ function calculateFinancialRatios() {
                 console.error('Financial ratios error:', data.error);
                 return;
             }
-            
+
             document.getElementById('liquidity-ratio').textContent = data.liquidity_ratio.toFixed(2);
-            
+
             const growthEl = document.getElementById('growth-rate');
             growthEl.textContent = (data.growth_rate > 0 ? '+' : '') + data.growth_rate + '%';
             growthEl.className = 'info-box-number ' + (data.growth_rate > 0 ? 'text-success' : 'text-danger');
-            
+
             document.getElementById('income-expense-ratio').textContent = data.income_expense_ratio.toFixed(2);
             document.getElementById('volatility').textContent = data.volatility + '%';
         })
@@ -1359,10 +1391,10 @@ function loadActivityHeatmap() {
                 console.error('Activity heatmap error:', data.error);
                 return;
             }
-            
+
             const container = document.getElementById('activity-heatmap');
             let html = '<div class="heatmap-grid">';
-            
+
             html += '<div class="row">';
             data.heatmap.forEach(day => {
                 const colorClass = day.value > 0 ? 'bg-success' : day.value < 0 ? 'bg-danger' : 'bg-secondary';
@@ -1374,17 +1406,17 @@ function loadActivityHeatmap() {
                 `;
             });
             html += '</div>';
-            
+
             html += `
                 <div class="mt-3">
                     <small class="text-muted">
-                        Total Days: ${data.summary.total_days} | 
-                        Positive: ${data.summary.positive_days} | 
+                        Total Days: ${data.summary.total_days} |
+                        Positive: ${data.summary.positive_days} |
                         Negative: ${data.summary.negative_days}
                     </small>
                 </div>
             `;
-            
+
             container.innerHTML = html;
         })
         .catch(error => {
@@ -1400,7 +1432,7 @@ function loadBestWorstDays() {
                 console.error('Best/worst days error:', data.error);
                 return;
             }
-            
+
             let bestHtml = '';
             data.best_days.forEach((day, index) => {
                 bestHtml += `
@@ -1411,7 +1443,7 @@ function loadBestWorstDays() {
                 `;
             });
             document.getElementById('best-days').innerHTML = bestHtml || '<li class="text-muted">No data available</li>';
-            
+
             let worstHtml = '';
             data.worst_days.forEach((day, index) => {
                 worstHtml += `
@@ -1436,8 +1468,8 @@ function loadWeeklyPatterns() {
                 console.error('Weekly patterns error:', data.error);
                 return;
             }
-            
-            // Destroy existing chart instance
+
+            // Destroy existing chart instance first
             if (weeklyPatternChart) {
                 weeklyPatternChart.destroy();
                 weeklyPatternChart = null;
@@ -1445,6 +1477,27 @@ function loadWeeklyPatterns() {
 
             const canvas = document.getElementById('weekly-pattern-chart');
             const ctx = canvas.getContext('2d');
+
+            // Get the card body (the parent of the canvas)
+            const cardBody = canvas.closest('.card-body');
+
+            // Check if info div already exists, if not create it
+            let info = cardBody.querySelector('.weekly-pattern-info');
+            if (!info) {
+                info = document.createElement('div');
+                info.className = 'mt-2 text-center weekly-pattern-info';
+                cardBody.appendChild(info); // Append to card body, not canvas parent
+            }
+
+            // Update info content
+            if (data.best_day) {
+                info.innerHTML = `
+                    <small class="text-muted">
+                        Best Day: <strong>${data.best_day.day}</strong> |
+                        Worst Day: <strong>${data.worst_day.day}</strong>
+                    </small>
+                `;
+            }
 
             // Explicit height control to prevent runaway growth
             canvas.parentNode.style.height = '400px'; // adjust as you like
@@ -1477,9 +1530,14 @@ function loadWeeklyPatterns() {
                 },
                 options: {
                     responsive: true,
-                    maintainAspectRatio: false, // chart will fill the fixed height container
+                    maintainAspectRatio: false,
                     plugins: {
-                        legend: { position: 'top' },
+                        legend: {
+                            position: 'top',
+                            labels: {
+                                padding: 10
+                            }
+                        },
                         tooltip: {
                             callbacks: {
                                 label: function(context) {
@@ -1493,32 +1551,13 @@ function loadWeeklyPatterns() {
                             beginAtZero: true,
                             ticks: {
                                 callback: function(value) {
-                                    return formatISK(value, true).replace(' ISK', '');
+                                    return formatAxisValue(value);
                                 }
                             }
                         }
                     }
                 }
             });
-
-            // Add/update the info div
-            const container = canvas.parentNode;
-            let info = container.querySelector('.weekly-pattern-info');
-            if (!info) {
-                info = document.createElement('div');
-                info.className = 'mt-2 text-center weekly-pattern-info';
-                container.appendChild(info);
-            }
-            if (data.best_day) {
-                info.innerHTML = `
-                    <small class="text-muted">
-                        Best Day: <strong>${data.best_day.day}</strong> | 
-                        Worst Day: <strong>${data.worst_day.day}</strong>
-                    </small>
-                `;
-            } else {
-                info.innerHTML = '';
-            }
         })
         .catch(error => {
             console.error('Error loading weekly patterns:', error);
@@ -1538,15 +1577,15 @@ function loadDivisionPerformance() {
                 console.error('Division performance error:', data.error);
                 return;
             }
-            
+
             let tableHtml = '';
             data.divisions.forEach(div => {
-                const trendIcon = div.trend === 'up' ? 
-                    '<i class="fas fa-arrow-up text-success"></i>' : 
+                const trendIcon = div.trend === 'up' ?
+                    '<i class="fas fa-arrow-up text-success"></i>' :
                     '<i class="fas fa-arrow-down text-danger"></i>';
-                
+
                 const roiClass = div.roi > 0 ? 'text-success' : 'text-danger';
-                
+
                 tableHtml += `
                     <tr>
                         <td>${div.name}</td>
@@ -1559,10 +1598,10 @@ function loadDivisionPerformance() {
                     </tr>
                 `;
             });
-            
-            document.getElementById('division-performance').innerHTML = 
+
+            document.getElementById('division-performance').innerHTML =
                 tableHtml || '<tr><td colspan="7" class="text-center text-muted">No performance data available</td></tr>';
-            
+
             if (data.summary && data.summary.best_performer) {
                 document.getElementById('top-income-sources').innerHTML = `
                     <li><strong>Best Performer:</strong> ${data.summary.best_performer.name}</li>
@@ -1570,7 +1609,7 @@ function loadDivisionPerformance() {
                     <li>Net Flow: ${formatISK(data.summary.best_performer.net_flow, true)}</li>
                 `;
             }
-            
+
             if (data.summary && data.summary.worst_performer) {
                 document.getElementById('top-expense-categories').innerHTML = `
                     <li><strong>Worst Performer:</strong> ${data.summary.worst_performer.name}</li>
@@ -1599,25 +1638,25 @@ function loadCashFlowWaterfall() {
         .then(data => {
             const canvas = document.getElementById('cashflow-waterfall');
             if (!canvas) return;
-            
+
             // Destroy existing chart
             if (cashflowWaterfallChart) {
                 cashflowWaterfallChart.destroy();
                 cashflowWaterfallChart = null;
             }
-            
+
             const ctx = canvas.getContext('2d');
-            
+
             // Explicit height control
             canvas.parentNode.style.height = '300px';
             canvas.parentNode.style.width = '100%';
-            
+
             // Prepare waterfall data
             const startBalance = 1000000000; // Example starting balance
             const income = data.income && data.income[0] ? data.income[0] : 0;
             const expenses = data.expenses && data.expenses[0] ? data.expenses[0] : 0;
             const endBalance = startBalance + income - expenses;
-            
+
             cashflowWaterfallChart = new Chart(ctx, {
                 type: 'bar',
                 data: {
@@ -1653,7 +1692,7 @@ function loadCashFlowWaterfall() {
                             beginAtZero: true,
                             ticks: {
                                 callback: function(value) {
-                                    return formatISK(value, true).replace(' ISK', '');
+                                    return formatAxisValue(value);
                                 }
                             }
                         }
@@ -1672,21 +1711,21 @@ function loadIncomeCategoriesDetailed() {
         .then(data => {
             const canvas = document.getElementById('income-categories-detailed');
             if (!canvas) return;
-            
+
             // Destroy existing chart
             if (incomeCategoriesDetailedChart) {
                 incomeCategoriesDetailedChart.destroy();
                 incomeCategoriesDetailedChart = null;
             }
-            
+
             const ctx = canvas.getContext('2d');
-            
+
             // Explicit height control for smaller pie chart
             canvas.parentNode.style.height = '250px';
             canvas.parentNode.style.width = '100%';
-            
+
             const colors = ['#10b981', '#3b82f6', '#8b5cf6', '#ec4899', '#f59e0b'];
-            
+
             incomeCategoriesDetailedChart = new Chart(ctx, {
                 type: 'pie',
                 data: {
@@ -1731,21 +1770,21 @@ function loadExpenseCategoriesDetailed() {
         .then(data => {
             const canvas = document.getElementById('expense-categories-detailed');
             if (!canvas) return;
-            
+
             // Destroy existing chart
             if (expenseCategoriesDetailedChart) {
                 expenseCategoriesDetailedChart.destroy();
                 expenseCategoriesDetailedChart = null;
             }
-            
+
             const ctx = canvas.getContext('2d');
-            
+
             // Explicit height control for smaller pie chart
             canvas.parentNode.style.height = '250px';
             canvas.parentNode.style.width = '100%';
-            
+
             const colors = ['#ef4444', '#f97316', '#f59e0b', '#eab308', '#84cc16'];
-            
+
             expenseCategoriesDetailedChart = new Chart(ctx, {
                 type: 'pie',
                 data: {
@@ -1791,12 +1830,12 @@ function loadNetFlowSummary() {
             const income = data.income && data.income[0] ? data.income[0] : 0;
             const expenses = data.expenses && data.expenses[0] ? data.expenses[0] : 0;
             const net = income - expenses;
-            
+
             document.getElementById('total-income').textContent = formatISK(income, true);
             document.getElementById('total-expenses').textContent = formatISK(expenses, true);
             document.getElementById('net-difference').textContent = formatISK(net, true);
             document.getElementById('net-flow-total').textContent = formatISK(net, true);
-            
+
             // Color code the net flow
             const netEl = document.getElementById('net-difference');
             if (net > 0) {
@@ -1816,58 +1855,6 @@ function loadDailyCashFlowTrend() {
     fetch(buildUrl(addCorpParam(`/corp-wallet-manager/api/analytics/daily-cashflow?days=${days}`)))
         .then(response => response.json())
         .then(data => {
-            // Destroy existing chart
-            if (dailyCashflowChart) {
-                dailyCashflowChart.destroy();
-                dailyCashflowChart = null;
-            }
-            
-            const canvas = document.getElementById('daily-cashflow-chart');
-            const ctx = canvas.getContext('2d');
-            
-            // Fix the parent container height
-            canvas.parentNode.style.height = '400px';
-            canvas.parentNode.style.width = '100%';
-            
-            dailyCashflowChart = new Chart(ctx, { // Fixed: just ctx, not ctx.getContext('2d')
-                type: 'bar',
-                data: {
-                    labels: data.labels || [],
-                    datasets: [{
-                        label: 'Net Cash Flow',
-                        data: data.datasets ? data.datasets.net_flow : [],
-                        backgroundColor: data.datasets && data.datasets.net_flow ? 
-                            data.datasets.net_flow.map(v => v >= 0 ? '#10b981' : '#ef4444') : [],
-                        borderColor: '#1f2937',
-                        borderWidth: 1
-                    }]
-                },
-                options: {
-                    responsive: true,
-                    maintainAspectRatio: false,
-                    plugins: {
-                        legend: { display: false },
-                        tooltip: {
-                            callbacks: {
-                                label: function(context) {
-                                    return 'Net Flow: ' + formatISK(context.parsed.y);
-                                }
-                            }
-                        }
-                    },
-                    scales: {
-                        y: {
-                            beginAtZero: true,
-                            ticks: {
-                                callback: function(value) {
-                                    return formatISK(value, true).replace(' ISK', '');
-                                }
-                            }
-                        }
-                    }
-                }
-            });
-            
             // Update statistics
             if (data.statistics) {
                 const statsHtml = `
@@ -1892,52 +1879,27 @@ function loadDailyCashFlowTrend() {
                 `;
                 document.getElementById('cashflow-statistics').innerHTML = statsHtml;
             }
-        })
-        .catch(error => {
-            console.error('Error loading daily cash flow trend:', error);
-        });
-}
-
-function loadDailyCashFlowWithDays(days) {
-    // Update button states - without using event.target
-    document.querySelectorAll('#cashflow .card-tools .btn-group .btn').forEach(btn => {
-        btn.classList.remove('active');
-        btn.classList.add('btn-outline-secondary');
-    });
-    
-    // Find the button with the matching days value and activate it
-    document.querySelectorAll('#cashflow .card-tools .btn-group .btn').forEach(btn => {
-        if (btn.textContent.includes(days + 'D')) {
-            btn.classList.remove('btn-outline-secondary');
-            btn.classList.add('active');
-        }
-    });
-    
-    // Reload chart with new days parameter
-    fetch(buildUrl(addCorpParam(`/corp-wallet-manager/api/analytics/daily-cashflow?days=${days}`)))
-        .then(response => response.json())
-        .then(data => {
             // Destroy existing chart
             if (dailyCashflowChart) {
                 dailyCashflowChart.destroy();
                 dailyCashflowChart = null;
             }
-            
+
             const canvas = document.getElementById('daily-cashflow-chart');
             const ctx = canvas.getContext('2d');
-            
-            // Explicit height control
+
+            // Fix the parent container height
             canvas.parentNode.style.height = '400px';
             canvas.parentNode.style.width = '100%';
-            
-            dailyCashflowChart = new Chart(ctx, {
+
+            dailyCashflowChart = new Chart(ctx, { // Fixed: just ctx, not ctx.getContext('2d')
                 type: 'bar',
                 data: {
                     labels: data.labels || [],
                     datasets: [{
                         label: 'Net Cash Flow',
                         data: data.datasets ? data.datasets.net_flow : [],
-                        backgroundColor: data.datasets && data.datasets.net_flow ? 
+                        backgroundColor: data.datasets && data.datasets.net_flow ?
                             data.datasets.net_flow.map(v => v >= 0 ? '#10b981' : '#ef4444') : [],
                         borderColor: '#1f2937',
                         borderWidth: 1
@@ -1961,18 +1923,42 @@ function loadDailyCashFlowWithDays(days) {
                             beginAtZero: true,
                             ticks: {
                                 callback: function(value) {
-                                    return formatISK(value, true).replace(' ISK', '');
+                                    return formatAxisValue(value);
                                 }
                             }
                         }
                     }
                 }
             });
-            
-            // Update statistics if available
+        })
+        .catch(error => {
+            console.error('Error loading daily cash flow trend:', error);
+        });
+}
+
+function loadDailyCashFlowWithDays(days) {
+    // Update button states - without using event.target
+    document.querySelectorAll('#cashflow .card-tools .btn-group .btn').forEach(btn => {
+        btn.classList.remove('active');
+        btn.classList.add('btn-outline-secondary');
+    });
+
+    // Find the button with the matching days value and activate it
+    document.querySelectorAll('#cashflow .card-tools .btn-group .btn').forEach(btn => {
+        if (btn.textContent.includes(days + 'D')) {
+            btn.classList.remove('btn-outline-secondary');
+            btn.classList.add('active');
+        }
+    });
+
+    // Reload chart with new days parameter
+    fetch(buildUrl(addCorpParam(`/corp-wallet-manager/api/analytics/daily-cashflow?days=${days}`)))
+        .then(response => response.json())
+        .then(data => {
+            // Update statistics BEFORE creating the chart
             if (data.statistics) {
                 const statsHtml = `
-                    <div class="row">
+                    <div class="row mt-3">
                         <div class="col-md-3">
                             <small class="text-muted">Total Income:</small>
                             <p class="mb-0 text-success">${formatISK(data.statistics.total_income, true)}</p>
@@ -1993,12 +1979,64 @@ function loadDailyCashFlowWithDays(days) {
                 `;
                 document.getElementById('cashflow-statistics').innerHTML = statsHtml;
             }
+
+            // Destroy existing chart
+            if (dailyCashflowChart) {
+                dailyCashflowChart.destroy();
+                dailyCashflowChart = null;
+            }
+
+            const canvas = document.getElementById('daily-cashflow-chart');
+            const ctx = canvas.getContext('2d');
+
+            // Explicit height control
+            canvas.parentNode.style.height = '400px';
+            canvas.parentNode.style.width = '100%';
+
+            dailyCashflowChart = new Chart(ctx, {
+                type: 'bar',
+                data: {
+                    labels: data.labels || [],
+                    datasets: [{
+                        label: 'Net Cash Flow',
+                        data: data.datasets ? data.datasets.net_flow : [],
+                        backgroundColor: data.datasets && data.datasets.net_flow ?
+                            data.datasets.net_flow.map(v => v >= 0 ? '#10b981' : '#ef4444') : [],
+                        borderColor: '#1f2937',
+                        borderWidth: 1
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    plugins: {
+                        legend: { display: false },
+                        tooltip: {
+                            callbacks: {
+                                label: function(context) {
+                                    return 'Net Flow: ' + formatISK(context.parsed.y);
+                                }
+                            }
+                        }
+                    },
+                    scales: {
+                        y: {
+                            beginAtZero: true,
+                            ticks: {
+                                callback: function(value) {
+                                    return formatAxisValue(value);
+                                }
+                            }
+                        }
+                    }
+                }
+            });
         })
         .catch(error => {
             console.error('Error loading daily cash flow for ' + days + ' days:', error);
         });
 }
-    
+
 // Reports Tab Functions
 function loadReportsData() {
     generateExecutiveSummary();
@@ -2013,34 +2051,34 @@ function generateExecutiveSummary() {
                 console.error('Executive summary error:', data.error);
                 return;
             }
-            
+
             let insightsHtml = '';
             data.insights.forEach(insight => {
                 insightsHtml += `<li>${insight}</li>`;
             });
             document.getElementById('key-insights').innerHTML = insightsHtml || '<li>No insights available</li>';
-            
+
             let recommendationsHtml = '';
             data.recommendations.forEach(rec => {
                 recommendationsHtml += `<li>${rec}</li>`;
             });
             document.getElementById('recommendations').innerHTML = recommendationsHtml || '<li>No recommendations at this time</li>';
-            
+
             let riskClass = 'alert-info';
             if (data.risk_assessment.level === 'Critical') riskClass = 'alert-danger';
             else if (data.risk_assessment.level === 'High') riskClass = 'alert-warning';
             else if (data.risk_assessment.level === 'Medium') riskClass = 'alert-warning';
-            
+
             let riskHtml = `
                 <div class="alert ${riskClass}">
                     <strong>Risk Level: ${data.risk_assessment.level}</strong>
                     <ul class="mb-0 mt-2">
             `;
-            
+
             data.risk_assessment.factors.forEach(factor => {
                 riskHtml += `<li>${factor}</li>`;
             });
-            
+
             riskHtml += '</ul></div>';
             document.getElementById('risk-assessment').innerHTML = riskHtml;
         })
@@ -2052,7 +2090,7 @@ function generateExecutiveSummary() {
 function populateReportMonths() {
     const select = document.getElementById('report-month');
     if (!select) return;
-    
+
     let html = '';
     for (let i = 0; i < 12; i++) {
         const date = new Date();
@@ -2088,7 +2126,7 @@ function refreshData() {
     loadPredictionChart();
     loadIncomeBreakdown();
     loadExpenseBreakdown();
-    
+
     // Check which tab is active and load its data
     const activeTab = document.querySelector('.nav-link.active').getAttribute('href');
     switch(activeTab) {
@@ -2114,12 +2152,12 @@ function refreshData() {
 document.addEventListener('DOMContentLoaded', function() {
     // Load corporation settings first
     loadCorporationSettings();
-    
+
     // Handle tab clicks directly
     $('.nav-tabs a[data-toggle="tab"]').on('click', function(e) {
         const target = $(this).attr('href');
         console.log('Tab switching to:', target);
-        
+
         // Wait for tab animation to complete
         setTimeout(function() {
             switch(target) {
