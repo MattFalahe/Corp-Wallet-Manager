@@ -1802,16 +1802,6 @@ function loadCashFlowWaterfall() {
                     }
                 }
             });
-            
-            // Remove any existing month info
-            const existingInfo = canvas.parentNode.querySelector('.month-info');
-            if (existingInfo) existingInfo.remove();
-
-            // Add month info
-            const monthInfo = document.createElement('div');
-            monthInfo.className = 'text-center text-muted mt-2 month-info';
-            monthInfo.innerHTML = `<small>Period: ${data.balance.month || 'Current Month'}</small>`;
-            canvas.parentNode.appendChild(monthInfo);
         })
         .catch(error => {
             console.error('Error loading cash flow waterfall:', error);
