@@ -1773,6 +1773,21 @@ function loadCashFlowWaterfall() {
                                     return (value >= 0 ? '+' : '') + formatISK(value);
                                 }
                             }
+                        },
+                        // Add subtitle plugin to show period inside the chart
+                        subtitle: {
+                            display: true,
+                            text: 'Period: ' + (data.balance.month || 'Current Month'),
+                            position: 'top',
+                            font: {
+                                size: 12,
+                                style: 'italic'
+                            },
+                            color: '#6b7280',
+                            padding: {
+                                top: 5,
+                                bottom: 5
+                            }
                         }
                     },
                     scales: {
@@ -1787,7 +1802,7 @@ function loadCashFlowWaterfall() {
                     }
                 }
             });
-
+            
             // Remove any existing month info
             const existingInfo = canvas.parentNode.querySelector('.month-info');
             if (existingInfo) existingInfo.remove();
@@ -2036,13 +2051,13 @@ function loadDailyCashFlowTrend(days = 30) { // Default parameter
 
 function loadDailyCashFlowWithDays(days) {
     // Update button states - without using event.target
-    document.querySelectorAll('#cashflow .card-tools .btn-group .btn').forEach(btn => {
+    document.querySelectorAll('#cashflow .row:nth-child(5) .card-tools .btn-group .btn').forEach(btn => {
         btn.classList.remove('active');
         btn.classList.add('btn-outline-secondary');
     });
 
     // Find the button with the matching days value and activate it
-    document.querySelectorAll('#cashflow .card-tools .btn-group .btn').forEach(btn => {
+    document.querySelectorAll('#cashflow .row:nth-child(5) .card-tools .btn-group .btn').forEach(btn => {
         if (btn.textContent.includes(days + 'D')) {
             btn.classList.remove('btn-outline-secondary');
             btn.classList.add('active');
@@ -2317,7 +2332,7 @@ function loadDivisionCashFlow(days) {
         });
 }
 
-// Load division comparison grid with mini charts
+// Load division comparison grid with mini line charts and statistics
 function loadDivisionComparisonGrid(divisions) {
     const container = document.getElementById('division-comparison-grid');
     if (!container) return;
@@ -2335,10 +2350,15 @@ function loadDivisionComparisonGrid(divisions) {
                 <div class="card">
                     <div class="card-header py-2">
                         <h6 class="mb-0">${div.name}</h6>
-                        <small class="text-muted">${formatISK(div.balance, true)}</small>
+                        <small class="text-muted">Balance: ${formatISK(div.balance, true)}</small>
                     </div>
                     <div class="card-body p-2">
-                        <canvas id="mini-chart-${div.id}" height="150"></canvas>
+                        <canvas id="mini-chart-${div.id}" height="120"></canvas>
+                        <div id="mini-stats-${div.id}" class="mt-2" style="font-size: 11px;">
+                            <div class="text-center text-muted">
+                                <i class="fas fa-spinner fa-spin"></i> Loading...
+                            </div>
+                        </div>
                     </div>
                 </div>
             </div>
@@ -2353,7 +2373,7 @@ function loadDivisionComparisonGrid(divisions) {
     });
 }
 
-// Load mini chart for a specific division
+// Load mini line chart for a specific division with statistics
 function loadMiniDivisionChart(divisionId) {
     fetch(buildUrl(addCorpParam(`/corp-wallet-manager/api/analytics/division-daily-cashflow?division_id=${divisionId}&days=7`)))
         .then(response => response.json())
@@ -2365,50 +2385,138 @@ function loadMiniDivisionChart(divisionId) {
             
             const ctx = canvas.getContext('2d');
             
+            // Create line chart instead of bar chart
             divisionMiniCharts[divisionId] = new Chart(ctx, {
-                type: 'bar',
+                type: 'line',
                 data: {
                     labels: data.labels || [],
-                    datasets: [{
-                        label: 'Net Flow',
-                        data: data.datasets ? data.datasets.net_flow : [],
-                        backgroundColor: data.datasets && data.datasets.net_flow ? 
-                            data.datasets.net_flow.map(v => v >= 0 ? '#10b981' : '#ef4444') : [],
-                        borderWidth: 1
-                    }]
+                    datasets: [
+                        {
+                            label: 'Income',
+                            data: data.datasets ? data.datasets.income : [],
+                            borderColor: '#10b981',
+                            backgroundColor: 'transparent',
+                            borderWidth: 2,
+                            tension: 0.3,
+                            pointRadius: 0,
+                            pointHoverRadius: 3
+                        },
+                        {
+                            label: 'Expenses',
+                            data: data.datasets ? data.datasets.expenses : [],
+                            borderColor: '#ef4444',
+                            backgroundColor: 'transparent',
+                            borderWidth: 2,
+                            tension: 0.3,
+                            pointRadius: 0,
+                            pointHoverRadius: 3
+                        },
+                        {
+                            label: 'Net',
+                            data: data.datasets ? data.datasets.net_flow : [],
+                            borderColor: '#3b82f6',
+                            backgroundColor: '#3b82f620',
+                            borderWidth: 2,
+                            fill: true,
+                            tension: 0.3,
+                            pointRadius: 0,
+                            pointHoverRadius: 3
+                        }
+                    ]
                 },
                 options: {
                     responsive: true,
                     maintainAspectRatio: false,
+                    interaction: {
+                        intersect: false,
+                        mode: 'index'
+                    },
                     plugins: {
-                        legend: { display: false },
+                        legend: { 
+                            display: false 
+                        },
                         tooltip: {
+                            enabled: true,
+                            position: 'nearest',
                             callbacks: {
                                 label: function(context) {
-                                    return formatISK(context.parsed.y, true);
+                                    return context.dataset.label + ': ' + formatISK(context.parsed.y, true);
                                 }
                             }
                         }
                     },
                     scales: {
                         x: {
-                            display: false
+                            display: false,
+                            grid: {
+                                display: false
+                            }
                         },
                         y: {
                             display: true,
+                            grid: {
+                                display: true,
+                                drawBorder: false,
+                                color: 'rgba(0,0,0,0.05)'
+                            },
                             ticks: {
+                                display: true,
                                 callback: function(value) {
                                     return formatAxisValue(value);
                                 },
-                                maxTicksLimit: 4
+                                maxTicksLimit: 3,
+                                font: {
+                                    size: 9
+                                }
                             }
                         }
                     }
                 }
             });
+            
+            // Update statistics below the chart
+            if (data.statistics) {
+                const statsDiv = document.getElementById(`mini-stats-${divisionId}`);
+                if (statsDiv) {
+                    const incomeFormatted = formatISK(data.statistics.total_income, true);
+                    const expenseFormatted = formatISK(data.statistics.total_expenses, true);
+                    const netFormatted = formatISK(data.statistics.net_total, true);
+                    const netClass = data.statistics.net_total >= 0 ? 'text-success' : 'text-danger';
+                    
+                    statsDiv.innerHTML = `
+                        <div class="row text-center" style="line-height: 1.2;">
+                            <div class="col-6 px-1">
+                                <small class="text-muted d-block">Income</small>
+                                <small class="text-success font-weight-bold">${incomeFormatted}</small>
+                            </div>
+                            <div class="col-6 px-1">
+                                <small class="text-muted d-block">Expense</small>
+                                <small class="text-danger font-weight-bold">${expenseFormatted}</small>
+                            </div>
+                        </div>
+                        <div class="row text-center mt-1" style="line-height: 1.2;">
+                            <div class="col-6 px-1">
+                                <small class="text-muted d-block">Net Total</small>
+                                <small class="${netClass} font-weight-bold">${netFormatted}</small>
+                            </div>
+                            <div class="col-6 px-1">
+                                <small class="text-muted d-block">Days +/-</small>
+                                <small class="font-weight-bold">
+                                    <span class="text-success">${data.statistics.days_positive}</span>/<span class="text-danger">${data.statistics.days_negative}</span>
+                                </small>
+                            </div>
+                        </div>
+                    `;
+                }
+            }
         })
         .catch(error => {
             console.error(`Error loading mini chart for division ${divisionId}:`, error);
+            // Update stats div with error message
+            const statsDiv = document.getElementById(`mini-stats-${divisionId}`);
+            if (statsDiv) {
+                statsDiv.innerHTML = '<div class="text-center text-danger"><small>Failed to load data</small></div>';
+            }
         });
 }
 
