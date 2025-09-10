@@ -2353,7 +2353,9 @@ function loadDivisionComparisonGrid(divisions) {
                         <small class="text-muted">Balance: ${formatISK(div.balance, true)}</small>
                     </div>
                     <div class="card-body p-2">
-                        <canvas id="mini-chart-${div.id}" height="120"></canvas>
+                        <div style="height: 120px; position: relative;">
+                            <canvas id="mini-chart-${div.id}"></canvas>
+                        </div>
                         <div id="mini-stats-${div.id}" class="mt-2" style="font-size: 11px;">
                             <div class="text-center text-muted">
                                 <i class="fas fa-spinner fa-spin"></i> Loading...
