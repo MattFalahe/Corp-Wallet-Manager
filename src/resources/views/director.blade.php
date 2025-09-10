@@ -740,6 +740,10 @@ let expenseCategoriesDetailedChart = null;
 let dailyCashflowChart = null;
 let weeklyPatternChart = null;
 let currentChartMode = 'flow';
+let divisionCashflowChart = null;
+let divisionMiniCharts = {};
+let currentDivisionId = null;
+let currentDivisionDays = 7;
 
 // Helper function to build URLs - FIXED VERSION
 //function buildUrl(path) {
@@ -1673,11 +1677,12 @@ function loadDivisionPerformance() {
 
 // Cash Flow Tab Functions
 function loadCashFlowData() {
-    loadCashFlowWaterfall();
+    loadCashFlowWaterfall(); // Updated version with proper starting balance
     loadIncomeCategoriesDetailed();
     loadExpenseCategoriesDetailed();
     loadNetFlowSummary();
     loadDailyCashFlowTrend();
+    loadDivisionsList(); // New function to load divisions
 }
 
 function loadCashFlowWaterfall() {
@@ -1783,9 +1788,13 @@ function loadCashFlowWaterfall() {
                 }
             });
 
+            // Remove any existing month info
+            const existingInfo = canvas.parentNode.querySelector('.month-info');
+            if (existingInfo) existingInfo.remove();
+
             // Add month info
             const monthInfo = document.createElement('div');
-            monthInfo.className = 'text-center text-muted mt-2';
+            monthInfo.className = 'text-center text-muted mt-2 month-info';
             monthInfo.innerHTML = `<small>Period: ${data.balance.month || 'Current Month'}</small>`;
             canvas.parentNode.appendChild(monthInfo);
         })
@@ -1940,7 +1949,7 @@ function loadNetFlowSummary() {
         });
 }
 
-function loadDailyCashFlowTrend() {
+function loadDailyCashFlowTrend(days = 30) { // Default parameter
     fetch(buildUrl(addCorpParam(`/corp-wallet-manager/api/analytics/daily-cashflow?days=${days}`)))
         .then(response => response.json())
         .then(data => {
@@ -2125,6 +2134,297 @@ function loadDailyCashFlowWithDays(days) {
             console.error('Error loading daily cash flow for ' + days + ' days:', error);
         });
 }
+
+// Load divisions list and populate selector
+function loadDivisionsList() {
+    fetch(buildUrl(addCorpParam('/corp-wallet-manager/api/analytics/divisions-list')))
+        .then(response => response.json())
+        .then(data => {
+            const selector = document.getElementById('division-selector');
+            if (!selector) return;
+            
+            let html = '<option value="">Select a division...</option>';
+            data.divisions.forEach(div => {
+                html += `<option value="${div.id}">${div.name} (${formatISK(div.balance, true)})</option>`;
+            });
+            selector.innerHTML = html;
+            
+            // Auto-select first division if available
+            if (data.divisions.length > 0) {
+                selector.value = data.divisions[0].id;
+                currentDivisionId = data.divisions[0].id;
+                loadDivisionCashFlow(currentDivisionDays);
+            }
+            
+            // Also load division comparison grid
+            loadDivisionComparisonGrid(data.divisions);
+        })
+        .catch(error => {
+            console.error('Error loading divisions list:', error);
+        });
+}
+
+// Load division-specific cash flow
+function loadDivisionCashFlow(days) {
+    const selector = document.getElementById('division-selector');
+    const divisionId = selector ? selector.value : currentDivisionId;
+    
+    if (!divisionId) {
+        console.log('No division selected');
+        return;
+    }
+    
+    currentDivisionDays = days;
+    currentDivisionId = divisionId;
+    
+    // Update button states
+    document.querySelectorAll('#cashflow .card:nth-child(2) .btn-group .btn').forEach(btn => {
+        btn.classList.remove('active');
+        btn.classList.add('btn-outline-secondary');
+    });
+    
+    // Find and activate the correct button
+    document.querySelectorAll('#cashflow .card:nth-child(2) .btn-group .btn').forEach(btn => {
+        if (btn.textContent.includes(days + 'D')) {
+            btn.classList.remove('btn-outline-secondary');
+            btn.classList.add('active');
+        }
+    });
+    
+    fetch(buildUrl(addCorpParam(`/corp-wallet-manager/api/analytics/division-daily-cashflow?division_id=${divisionId}&days=${days}`)))
+        .then(response => response.json())
+        .then(data => {
+            if (data.error) {
+                console.error('Division cash flow error:', data.error);
+                return;
+            }
+            
+            // Update statistics
+            if (data.statistics) {
+                const statsHtml = `
+                    <div class="row">
+                        <div class="col-md-3">
+                            <small class="text-muted">Total Income:</small>
+                            <p class="mb-0 text-success">${formatISK(data.statistics.total_income, true)}</p>
+                        </div>
+                        <div class="col-md-3">
+                            <small class="text-muted">Total Expenses:</small>
+                            <p class="mb-0 text-danger">${formatISK(data.statistics.total_expenses, true)}</p>
+                        </div>
+                        <div class="col-md-3">
+                            <small class="text-muted">Net Total:</small>
+                            <p class="mb-0">${formatISK(data.statistics.net_total, true)}</p>
+                        </div>
+                        <div class="col-md-3">
+                            <small class="text-muted">Days Positive/Negative:</small>
+                            <p class="mb-0">
+                                <span class="text-success">${data.statistics.days_positive}</span> / 
+                                <span class="text-danger">${data.statistics.days_negative}</span>
+                            </p>
+                        </div>
+                    </div>
+                `;
+                document.getElementById('division-cashflow-stats').innerHTML = statsHtml;
+            }
+            
+            // Destroy existing chart
+            if (divisionCashflowChart) {
+                divisionCashflowChart.destroy();
+                divisionCashflowChart = null;
+            }
+            
+            const canvas = document.getElementById('division-cashflow-chart');
+            const ctx = canvas.getContext('2d');
+            
+            // Explicit height control
+            canvas.parentNode.style.height = '400px';
+            canvas.parentNode.style.width = '100%';
+            
+            divisionCashflowChart = new Chart(ctx, {
+                type: 'line',
+                data: {
+                    labels: data.labels || [],
+                    datasets: [
+                        {
+                            label: 'Daily Income',
+                            data: data.datasets ? data.datasets.income : [],
+                            borderColor: '#10b981',
+                            backgroundColor: '#10b98120',
+                            borderWidth: 2,
+                            tension: 0.3
+                        },
+                        {
+                            label: 'Daily Expenses',
+                            data: data.datasets ? data.datasets.expenses : [],
+                            borderColor: '#ef4444',
+                            backgroundColor: '#ef444420',
+                            borderWidth: 2,
+                            tension: 0.3
+                        },
+                        {
+                            label: 'Net Flow',
+                            data: data.datasets ? data.datasets.net_flow : [],
+                            borderColor: '#3b82f6',
+                            backgroundColor: '#3b82f620',
+                            borderWidth: 3,
+                            tension: 0.3,
+                            fill: true
+                        }
+                    ]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    interaction: {
+                        mode: 'index',
+                        intersect: false,
+                    },
+                    plugins: {
+                        legend: {
+                            position: 'top',
+                            labels: {
+                                usePointStyle: true,
+                                padding: 20
+                            }
+                        },
+                        tooltip: {
+                            callbacks: {
+                                label: function(context) {
+                                    return context.dataset.label + ': ' + formatISK(context.parsed.y);
+                                }
+                            }
+                        },
+                        title: {
+                            display: true,
+                            text: `${data.division_name} - ${days} Day Cash Flow`
+                        }
+                    },
+                    scales: {
+                        y: {
+                            beginAtZero: true,
+                            ticks: {
+                                callback: function(value) {
+                                    return formatAxisValue(value);
+                                }
+                            }
+                        }
+                    }
+                }
+            });
+        })
+        .catch(error => {
+            console.error('Error loading division cash flow:', error);
+        });
+}
+
+// Load division comparison grid with mini charts
+function loadDivisionComparisonGrid(divisions) {
+    const container = document.getElementById('division-comparison-grid');
+    if (!container) return;
+    
+    // Clear existing mini charts
+    Object.values(divisionMiniCharts).forEach(chart => {
+        if (chart) chart.destroy();
+    });
+    divisionMiniCharts = {};
+    
+    let html = '';
+    divisions.forEach(div => {
+        html += `
+            <div class="col-md-4 mb-3">
+                <div class="card">
+                    <div class="card-header py-2">
+                        <h6 class="mb-0">${div.name}</h6>
+                        <small class="text-muted">${formatISK(div.balance, true)}</small>
+                    </div>
+                    <div class="card-body p-2">
+                        <canvas id="mini-chart-${div.id}" height="150"></canvas>
+                    </div>
+                </div>
+            </div>
+        `;
+    });
+    
+    container.innerHTML = html;
+    
+    // Load data for each mini chart
+    divisions.forEach(div => {
+        loadMiniDivisionChart(div.id);
+    });
+}
+
+// Load mini chart for a specific division
+function loadMiniDivisionChart(divisionId) {
+    fetch(buildUrl(addCorpParam(`/corp-wallet-manager/api/analytics/division-daily-cashflow?division_id=${divisionId}&days=7`)))
+        .then(response => response.json())
+        .then(data => {
+            if (data.error) return;
+            
+            const canvas = document.getElementById(`mini-chart-${divisionId}`);
+            if (!canvas) return;
+            
+            const ctx = canvas.getContext('2d');
+            
+            divisionMiniCharts[divisionId] = new Chart(ctx, {
+                type: 'bar',
+                data: {
+                    labels: data.labels || [],
+                    datasets: [{
+                        label: 'Net Flow',
+                        data: data.datasets ? data.datasets.net_flow : [],
+                        backgroundColor: data.datasets && data.datasets.net_flow ? 
+                            data.datasets.net_flow.map(v => v >= 0 ? '#10b981' : '#ef4444') : [],
+                        borderWidth: 1
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    plugins: {
+                        legend: { display: false },
+                        tooltip: {
+                            callbacks: {
+                                label: function(context) {
+                                    return formatISK(context.parsed.y, true);
+                                }
+                            }
+                        }
+                    },
+                    scales: {
+                        x: {
+                            display: false
+                        },
+                        y: {
+                            display: true,
+                            ticks: {
+                                callback: function(value) {
+                                    return formatAxisValue(value);
+                                },
+                                maxTicksLimit: 4
+                            }
+                        }
+                    }
+                }
+            });
+        })
+        .catch(error => {
+            console.error(`Error loading mini chart for division ${divisionId}:`, error);
+        });
+}
+
+// Update the division selector when it changes
+document.addEventListener('DOMContentLoaded', function() {
+    // Add event listener for division selector
+    const selector = document.getElementById('division-selector');
+    if (selector) {
+        selector.addEventListener('change', function() {
+            currentDivisionId = this.value;
+            if (currentDivisionId) {
+                loadDivisionCashFlow(currentDivisionDays);
+            }
+        });
+    }
+});
 
 // Reports Tab Functions
 function loadReportsData() {
