@@ -965,8 +965,9 @@ class AnalyticsController extends Controller
             
             $dailyData = $query->get();
             
-            // Get division name
-            $divisionName = $this->getDivisionName($divisionId, $corporationId);
+            // Get division name - using the helper method properly
+            $divisionNames = $this->getDivisionNames($corporationId);
+            $divisionName = $divisionNames[$divisionId] ?? "Division {$divisionId}";
             
             // Format for chart
             $labels = [];
@@ -1018,7 +1019,10 @@ class AnalyticsController extends Controller
             
         } catch (\Exception $e) {
             Log::error('AnalyticsController divisionDailyCashFlow error', [
-                'error' => $e->getMessage()
+                'error' => $e->getMessage(),
+                'trace' => $e->getTraceAsString(),
+                'corporation_id' => $request->get('corporation_id'),
+                'division_id' => $request->get('division_id')
             ]);
             
             return response()->json([
