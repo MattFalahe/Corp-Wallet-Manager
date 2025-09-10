@@ -1633,8 +1633,15 @@ function loadCashFlowData() {
 }
 
 function loadCashFlowWaterfall() {
-    fetch(buildUrl(addCorpParam('/corp-wallet-manager/api/income-expense?months=1')))
+    // First get the last month's closing balance
+    fetch(buildUrl(addCorpParam('/corp-wallet-manager/api/analytics/last-month-balance')))
         .then(response => response.json())
+        .then(balanceData => {
+            // Then get current month's income/expense
+            return fetch(buildUrl(addCorpParam('/corp-wallet-manager/api/income-expense?months=1')))
+                .then(response => response.json())
+                .then(flowData => ({balance: balanceData, flow: flowData}));
+        })
         .then(data => {
             const canvas = document.getElementById('cashflow-waterfall');
             if (!canvas) return;
@@ -1651,25 +1658,48 @@ function loadCashFlowWaterfall() {
             canvas.parentNode.style.height = '300px';
             canvas.parentNode.style.width = '100%';
 
-            // Prepare waterfall data
-            const startBalance = 1000000000; // Example starting balance
-            const income = data.income && data.income[0] ? data.income[0] : 0;
-            const expenses = data.expenses && data.expenses[0] ? data.expenses[0] : 0;
+            // Use actual starting balance from last month
+            const startBalance = data.balance.closing_balance || 0;
+            const income = data.flow.income && data.flow.income[0] ? data.flow.income[0] : 0;
+            const expenses = data.flow.expenses && data.flow.expenses[0] ? data.flow.expenses[0] : 0;
             const endBalance = startBalance + income - expenses;
+
+            // Prepare data for waterfall effect
+            const waterfallData = [
+                {
+                    label: 'Starting Balance',
+                    value: startBalance,
+                    cumulative: startBalance,
+                    color: '#3b82f6'
+                },
+                {
+                    label: 'Income',
+                    value: income,
+                    cumulative: startBalance + income,
+                    color: '#10b981'
+                },
+                {
+                    label: 'Expenses',
+                    value: -expenses,
+                    cumulative: startBalance + income - expenses,
+                    color: '#ef4444'
+                },
+                {
+                    label: 'Ending Balance',
+                    value: endBalance,
+                    cumulative: endBalance,
+                    color: endBalance > startBalance ? '#10b981' : '#ef4444'
+                }
+            ];
 
             cashflowWaterfallChart = new Chart(ctx, {
                 type: 'bar',
                 data: {
-                    labels: ['Starting Balance', 'Income', 'Expenses', 'Ending Balance'],
+                    labels: waterfallData.map(d => d.label),
                     datasets: [{
                         label: 'Cash Flow',
-                        data: [startBalance, income, -expenses, endBalance],
-                        backgroundColor: [
-                            '#3b82f6',
-                            '#10b981',
-                            '#ef4444',
-                            endBalance > startBalance ? '#10b981' : '#ef4444'
-                        ],
+                        data: waterfallData.map(d => d.value),
+                        backgroundColor: waterfallData.map(d => d.color),
                         borderColor: '#1f2937',
                         borderWidth: 1
                     }]
@@ -1682,14 +1712,19 @@ function loadCashFlowWaterfall() {
                         tooltip: {
                             callbacks: {
                                 label: function(context) {
-                                    return formatISK(Math.abs(context.parsed.y));
+                                    const value = context.parsed.y;
+                                    const label = context.label;
+                                    if (label === 'Starting Balance' || label === 'Ending Balance') {
+                                        return 'Balance: ' + formatISK(Math.abs(value));
+                                    }
+                                    return (value >= 0 ? '+' : '') + formatISK(value);
                                 }
                             }
                         }
                     },
                     scales: {
                         y: {
-                            beginAtZero: true,
+                            beginAtZero: false,
                             ticks: {
                                 callback: function(value) {
                                     return formatAxisValue(value);
@@ -1699,6 +1734,12 @@ function loadCashFlowWaterfall() {
                     }
                 }
             });
+
+            // Add month info
+            const monthInfo = document.createElement('div');
+            monthInfo.className = 'text-center text-muted mt-2';
+            monthInfo.innerHTML = `<small>Period: ${data.balance.month || 'Current Month'}</small>`;
+            canvas.parentNode.appendChild(monthInfo);
         })
         .catch(error => {
             console.error('Error loading cash flow waterfall:', error);
