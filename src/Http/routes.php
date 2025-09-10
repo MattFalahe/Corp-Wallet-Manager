@@ -98,6 +98,19 @@ Route::group([
     Route::get('/api/analytics/division-performance', 'AnalyticsController@divisionPerformance')
         ->name('corpwalletmanager.analytics.division-performance')
         ->middleware('can:corpwalletmanager.director_view');
+
+    // Cash Flow Tab Routes
+    Route::get('/api/analytics/last-month-balance', 'AnalyticsController@lastMonthBalance')
+        ->name('corpwalletmanager.analytics.last-month-balance')
+        ->middleware('can:corpwalletmanager.director_view');
+    
+    Route::get('/api/analytics/division-daily-cashflow', 'AnalyticsController@divisionDailyCashFlow')
+        ->name('corpwalletmanager.analytics.division-daily-cashflow')
+        ->middleware('can:corpwalletmanager.director_view');
+    
+    Route::get('/api/analytics/divisions-list', 'AnalyticsController@divisionsList')
+        ->name('corpwalletmanager.analytics.divisions-list')
+        ->middleware('can:corpwalletmanager.director_view');
     
     // Reports Tab Routes
     Route::get('/api/analytics/executive-summary', 'AnalyticsController@executiveSummary')
