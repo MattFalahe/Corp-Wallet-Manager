@@ -464,11 +464,12 @@
 
                 <!-- Cash Flow Tab -->
                 <div class="tab-pane" id="cashflow">
+                    <!-- Overall Summary Section -->
                     <div class="row mt-3">
                         <div class="col-12">
                             <div class="card">
                                 <div class="card-header">
-                                    <h3 class="card-title">Cash Flow Waterfall Chart</h3>
+                                    <h3 class="card-title">Overall Cash Flow Waterfall</h3>
                                 </div>
                                 <div class="card-body">
                                     <canvas id="cashflow-waterfall" height="300"></canvas>
@@ -476,7 +477,53 @@
                             </div>
                         </div>
                     </div>
-
+                
+                    <!-- Division Selector and Chart -->
+                    <div class="row mt-3">
+                        <div class="col-12">
+                            <div class="card">
+                                <div class="card-header">
+                                    <h3 class="card-title">Division Daily Cash Flow</h3>
+                                    <div class="card-tools">
+                                        <select class="form-control form-control-sm d-inline-block" style="width: 200px;" id="division-selector">
+                                            <option value="">Loading divisions...</option>
+                                        </select>
+                                        <div class="btn-group btn-group-sm ml-2">
+                                            <button type="button" class="btn btn-outline-secondary active" onclick="loadDivisionCashFlow(7)">7D</button>
+                                            <button type="button" class="btn btn-outline-secondary" onclick="loadDivisionCashFlow(30)">30D</button>
+                                            <button type="button" class="btn btn-outline-secondary" onclick="loadDivisionCashFlow(60)">60D</button>
+                                        </div>
+                                    </div>
+                                </div>
+                                <div class="card-body">
+                                    <div style="height: 400px; position: relative;">
+                                        <canvas id="division-cashflow-chart"></canvas>
+                                    </div>
+                                    <div id="division-cashflow-stats" class="mt-3">
+                                        <!-- Statistics will be populated here -->
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                
+                    <!-- Division Comparison Grid -->
+                    <div class="row mt-3">
+                        <div class="col-12">
+                            <div class="card">
+                                <div class="card-header">
+                                    <h3 class="card-title">All Divisions Comparison (Last 7 Days)</h3>
+                                </div>
+                                <div class="card-body">
+                                    <div class="row" id="division-comparison-grid">
+                                        <!-- Mini charts will be populated here -->
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                
+                    <!-- Income/Expense Categories Row -->
                     <div class="row mt-3">
                         <div class="col-md-4">
                             <div class="card">
@@ -527,12 +574,13 @@
                             </div>
                         </div>
                     </div>
-
+                
+                    <!-- Overall Daily Trend -->
                     <div class="row mt-3">
                         <div class="col-12">
                             <div class="card">
                                 <div class="card-header">
-                                    <h3 class="card-title">Daily Cash Flow Trend</h3>
+                                    <h3 class="card-title">Overall Daily Cash Flow Trend</h3>
                                     <div class="card-tools">
                                         <div class="btn-group btn-group-sm">
                                             <button type="button" class="btn btn-outline-secondary active" onclick="loadDailyCashFlowWithDays(30)">30D</button>
