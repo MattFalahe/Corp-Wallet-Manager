@@ -171,6 +171,10 @@ Route::group([
     Route::get('/settings/job-status', 'SettingsController@jobStatus')
         ->name('corpwalletmanager.settings.job-status')
         ->middleware('can:corpwalletmanager.settings');
+
+    Route::get('/settings/access-logs', 'SettingsController@getAccessLogs')
+        ->name('corpwalletmanager.settings.access-logs')
+        ->middleware('can:corpwalletmanager.settings');
     
     // New route for getting selected corporation settings
     Route::get('/api/selected-corporation', 'SettingsController@getSelectedCorporation')
