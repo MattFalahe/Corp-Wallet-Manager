@@ -15,9 +15,11 @@
         <div class="alert alert-info mb-3" id="corp-selector-info">
             <i class="fas fa-info-circle"></i>
             <span id="current-corp-display">Loading corporation settings...</span>
-            <a href="{{ route('corpwalletmanager.settings') }}" class="float-right">
-                <i class="fas fa-cog"></i> Change in Settings
-            </a>
+            @can('corpwalletmanager.settings')
+                <a href="{{ route('corpwalletmanager.settings') }}" class="float-right">
+                    <i class="fas fa-cog"></i> Change in Settings
+                </a>
+            @endcan
         </div>
 
         <!-- Tab Navigation -->
