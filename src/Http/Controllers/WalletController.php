@@ -818,6 +818,348 @@ class WalletController extends Controller
         }
     }
 
+    // ========== ADDITIONAL METHODS FOR MEMBER VIEW ==========
+
+    /**
+     * Get member-appropriate health status
+     */
+    public function memberHealth(Request $request)
+    {
+        try {
+            $corporationId = $this->getCorporationId($request);
+            
+            // Get basic health metrics without sensitive details
+            $currentMonth = Carbon::now()->format('Y-m');
+            $lastMonth = Carbon::now()->subMonth()->format('Y-m');
+            
+            // Current month balance trend
+            $currentQuery = MonthlyBalance::where('month', $currentMonth);
+            if ($corporationId) {
+                $currentQuery->where('corporation_id', $corporationId);
+            }
+            $currentBalance = (float)($currentQuery->sum('balance') ?? 0);
+            
+            // Last month balance
+            $lastQuery = MonthlyBalance::where('month', $lastMonth);
+            if ($corporationId) {
+                $lastQuery->where('corporation_id', $corporationId);
+            }
+            $lastBalance = (float)($lastQuery->sum('balance') ?? 0);
+            
+            // Calculate simple health score (0-100)
+            $healthScore = 50; // Base score
+            
+            // Positive balance adds points
+            if ($currentBalance > 0) {
+                $healthScore += 20;
+            }
+            
+            // Growth adds points
+            if ($currentBalance > $lastBalance) {
+                $growthRate = $lastBalance > 0 ? (($currentBalance - $lastBalance) / $lastBalance) : 0;
+                $healthScore += min(30, $growthRate * 100); // Max 30 points for growth
+            }
+            
+            // Check transaction activity
+            $transactionCount = DB::table('corporation_wallet_journals')
+                ->whereMonth('date', Carbon::now()->month)
+                ->whereYear('date', Carbon::now()->year);
+            
+            if ($corporationId) {
+                $transactionCount->where('corporation_id', $corporationId);
+            }
+            
+            $transactions = $transactionCount->count();
+            if ($transactions > 100) {
+                $healthScore = min(100, $healthScore + 10);
+            }
+            
+            return response()->json([
+                'health_score' => round($healthScore),
+                'has_positive_balance' => $currentBalance > 0,
+                'is_growing' => $currentBalance > $lastBalance,
+                'activity_level' => $transactions > 500 ? 'High' : ($transactions > 100 ? 'Medium' : 'Low'),
+            ]);
+            
+        } catch (\Exception $e) {
+            Log::error('Member health API error', ['error' => $e->getMessage()]);
+            return response()->json([
+                'health_score' => 50,
+                'has_positive_balance' => true,
+                'is_growing' => false,
+                'activity_level' => 'Unknown',
+            ], 500);
+        }
+    }
+    
+    /**
+     * Get member goals data
+     */
+    public function memberGoals(Request $request)
+    {
+        try {
+            $corporationId = $this->getCorporationId($request);
+            
+            // Get or create goals from settings
+            $savingsTarget = Settings::getSetting('goal_savings_target', 1000000000);
+            $activityTarget = Settings::getSetting('goal_activity_target', 1000);
+            $growthTarget = Settings::getSetting('goal_growth_target', 10);
+            
+            // Calculate current progress
+            $currentBalance = DB::table('corporation_wallet_balances');
+            if ($corporationId) {
+                $currentBalance->where('corporation_id', $corporationId);
+            }
+            $balance = (float)($currentBalance->sum('balance') ?? 0);
+            
+            // Activity count
+            $transactionCount = DB::table('corporation_wallet_journals')
+                ->whereMonth('date', Carbon::now()->month)
+                ->whereYear('date', Carbon::now()->year);
+            
+            if ($corporationId) {
+                $transactionCount->where('corporation_id', $corporationId);
+            }
+            $transactions = $transactionCount->count();
+            
+            // Growth calculation
+            $lastMonth = Carbon::now()->subMonth();
+            $lastMonthBalance = MonthlyBalance::where('month', $lastMonth->format('Y-m'));
+            if ($corporationId) {
+                $lastMonthBalance->where('corporation_id', $corporationId);
+            }
+            $previousBalance = (float)($lastMonthBalance->sum('balance') ?? 0);
+            
+            $growthRate = $previousBalance > 0 
+                ? (($balance - $previousBalance) / $previousBalance) * 100 
+                : 0;
+            
+            // Calculate stretch goals
+            $daysPositive = $this->calculateDaysPositive($corporationId);
+            $allDivisionsProfit = $this->checkAllDivisionsProfit($corporationId);
+            
+            return response()->json([
+                'savings' => [
+                    'current' => $balance,
+                    'target' => (float)$savingsTarget,
+                    'percentage' => min(100, ($balance / $savingsTarget) * 100),
+                ],
+                'activity' => [
+                    'current' => $transactions,
+                    'target' => (int)$activityTarget,
+                    'percentage' => min(100, ($transactions / $activityTarget) * 100),
+                ],
+                'growth' => [
+                    'current' => round($growthRate, 1),
+                    'target' => (float)$growthTarget,
+                    'percentage' => min(100, ($growthRate / $growthTarget) * 100),
+                ],
+                'stretch_goals' => [
+                    'positive_cashflow_30_days' => $daysPositive >= 30,
+                    'zero_days_below_threshold' => $daysPositive >= 30,
+                    'all_divisions_profitable' => $allDivisionsProfit,
+                ],
+            ]);
+            
+        } catch (\Exception $e) {
+            Log::error('Member goals API error', ['error' => $e->getMessage()]);
+            return response()->json([
+                'error' => 'Unable to load goals',
+                'savings' => ['current' => 0, 'target' => 1000000000, 'percentage' => 0],
+                'activity' => ['current' => 0, 'target' => 1000, 'percentage' => 0],
+                'growth' => ['current' => 0, 'target' => 10, 'percentage' => 0],
+            ], 500);
+        }
+    }
+    
+    /**
+     * Get member milestones
+     */
+    public function memberMilestones(Request $request)
+    {
+        try {
+            $corporationId = $this->getCorporationId($request);
+            
+            $milestones = [];
+            $events = [];
+            
+            // Check various milestones
+            $daysPositive = $this->calculateDaysPositive($corporationId);
+            if ($daysPositive >= 30) {
+                $milestones[] = [
+                    'icon' => 'fa-check-circle text-success',
+                    'text' => "Maintained positive balance for {$daysPositive} days",
+                    'achieved_at' => Carbon::now()->subDays(30)->format('Y-m-d'),
+                ];
+            } elseif ($daysPositive >= 15) {
+                $milestones[] = [
+                    'icon' => 'fa-check-circle text-info',
+                    'text' => "Positive balance streak: {$daysPositive} days",
+                    'achieved_at' => Carbon::now()->subDays(15)->format('Y-m-d'),
+                ];
+            }
+            
+            // Check for balance milestones
+            $currentBalance = DB::table('corporation_wallet_balances');
+            if ($corporationId) {
+                $currentBalance->where('corporation_id', $corporationId);
+            }
+            $balance = (float)($currentBalance->sum('balance') ?? 0);
+            
+            if ($balance >= 10000000000) { // 10B
+                $milestones[] = [
+                    'icon' => 'fa-trophy text-warning',
+                    'text' => 'Reached 10B ISK milestone',
+                    'achieved_at' => Carbon::now()->format('Y-m-d'),
+                ];
+            } elseif ($balance >= 1000000000) { // 1B
+                $milestones[] = [
+                    'icon' => 'fa-trophy text-info',
+                    'text' => 'Reached 1B ISK milestone',
+                    'achieved_at' => Carbon::now()->format('Y-m-d'),
+                ];
+            }
+            
+            // Check activity milestones
+            $monthlyTransactions = DB::table('corporation_wallet_journals')
+                ->whereMonth('date', Carbon::now()->month)
+                ->whereYear('date', Carbon::now()->year);
+            
+            if ($corporationId) {
+                $monthlyTransactions->where('corporation_id', $corporationId);
+            }
+            $transactionCount = $monthlyTransactions->count();
+            
+            if ($transactionCount >= 1000) {
+                $milestones[] = [
+                    'icon' => 'fa-chart-line text-success',
+                    'text' => 'Over 1000 transactions this month',
+                    'achieved_at' => Carbon::now()->format('Y-m-d'),
+                ];
+            }
+            
+            // Add upcoming events
+            $daysInMonth = Carbon::now()->daysInMonth;
+            $currentDay = Carbon::now()->day;
+            $daysUntilMonthEnd = $daysInMonth - $currentDay;
+            
+            $events[] = [
+                'icon' => 'fa-calendar-check',
+                'text' => "{$daysUntilMonthEnd} days until month end",
+                'date' => Carbon::now()->endOfMonth()->format('Y-m-d'),
+            ];
+            
+            // Simulated dividend date (15th of each month)
+            $dividendDay = 15;
+            $daysUntilDividend = $dividendDay > $currentDay 
+                ? $dividendDay - $currentDay 
+                : ($daysInMonth - $currentDay) + $dividendDay;
+                
+            $events[] = [
+                'icon' => 'fa-coins',
+                'text' => "{$daysUntilDividend} days until dividend payment",
+                'date' => Carbon::now()->day(15)->format('Y-m-d'),
+            ];
+            
+            return response()->json([
+                'milestones' => $milestones,
+                'events' => $events,
+                'summary' => [
+                    'total_milestones' => count($milestones),
+                    'upcoming_events' => count($events),
+                ],
+            ]);
+            
+        } catch (\Exception $e) {
+            Log::error('Member milestones API error', ['error' => $e->getMessage()]);
+            return response()->json([
+                'milestones' => [],
+                'events' => [],
+                'summary' => ['total_milestones' => 0, 'upcoming_events' => 0],
+            ], 500);
+        }
+    }
+    
+    /**
+     * Log member access for tracking
+     */
+    public function logMemberAccess(Request $request)
+    {
+        try {
+            $userId = auth()->id();
+            $corporationId = $request->input('corporation_id');
+            
+            DB::table('corpwalletmanager_access_logs')->insert([
+                'user_id' => $userId,
+                'corporation_id' => $corporationId,
+                'view_type' => $request->input('view', 'member'),
+                'accessed_at' => Carbon::now(),
+                'ip_address' => $request->ip(),
+                'user_agent' => $request->userAgent(),
+            ]);
+            
+            return response()->json(['logged' => true]);
+            
+        } catch (\Exception $e) {
+            // Don't fail the request if logging fails
+            Log::warning('Failed to log member access', [
+                'error' => $e->getMessage(),
+                'user' => auth()->id(),
+            ]);
+            return response()->json(['logged' => false]);
+        }
+    }
+    
+    // Helper Methods
+    
+    /**
+     * Calculate days with positive balance
+     */
+    private function calculateDaysPositive($corporationId)
+    {
+        $thirtyDaysAgo = Carbon::now()->subDays(30);
+        
+        $query = DB::table('corporation_wallet_journals')
+            ->selectRaw('DATE(date) as day, SUM(amount) as daily_change')
+            ->where('date', '>=', $thirtyDaysAgo)
+            ->groupBy('day');
+        
+        if ($corporationId) {
+            $query->where('corporation_id', $corporationId);
+        }
+        
+        $dailyChanges = $query->get();
+        $positiveDays = $dailyChanges->filter(function ($day) {
+            return $day->daily_change > 0;
+        })->count();
+        
+        return $positiveDays;
+    }
+    
+    /**
+     * Check if all divisions are profitable
+     */
+    private function checkAllDivisionsProfit($corporationId)
+    {
+        if (!$corporationId) {
+            return false;
+        }
+        
+        $currentMonth = Carbon::now()->format('Y-m');
+        
+        $divisions = DivisionBalance::where('corporation_id', $corporationId)
+            ->where('month', $currentMonth)
+            ->get();
+        
+        if ($divisions->isEmpty()) {
+            return false;
+        }
+        
+        return $divisions->every(function ($division) {
+            return $division->balance > 0;
+        });
+    }
+
     // ========== HELPER METHODS ==========
     
     /**
