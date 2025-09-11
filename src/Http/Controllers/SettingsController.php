@@ -357,4 +357,63 @@ class SettingsController extends Controller
             ], 500);
         }
     }
+
+    /**
+     * Get access logs via AJAX
+     */
+    public function getAccessLogs(Request $request)
+    {
+        try {
+            // Check if the table exists first
+            if (!Schema::hasTable('corpwalletmanager_access_logs')) {
+                return response()->json([
+                    'logs' => [],
+                    'message' => 'Access logs table not found. Please run migrations.'
+                ]);
+            }
+            
+            $logsQuery = DB::table('corpwalletmanager_access_logs as al');
+            
+            // Check if users table exists for join
+            if (Schema::hasTable('users')) {
+                $logsQuery->leftJoin('users as u', 'al.user_id', '=', 'u.id');
+            }
+            
+            // Check if corporation_infos table exists
+            if (Schema::hasTable('corporation_infos')) {
+                $logsQuery->leftJoin('corporation_infos as c', 'al.corporation_id', '=', 'c.corporation_id');
+            }
+            
+            $logs = $logsQuery
+                ->select(
+                    Schema::hasTable('users') ? 'u.name as user_name' : DB::raw('NULL as user_name'),
+                    'al.view_type',
+                    Schema::hasTable('corporation_infos') ? 'c.name as corporation_name' : DB::raw('NULL as corporation_name'),
+                    'al.accessed_at',
+                    'al.ip_address'
+                )
+                ->orderBy('al.accessed_at', 'desc')
+                ->limit(50)
+                ->get();
+                
+            return response()->json([
+                'logs' => $logs->map(function ($log) {
+                    return [
+                        'user' => $log->user_name ?? 'User #' . ($log->user_id ?? 'Unknown'),
+                        'view' => ucfirst($log->view_type),
+                        'corporation' => $log->corporation_name ?? ($log->corporation_id ? 'Corp #' . $log->corporation_id : 'All'),
+                        'accessed_at' => Carbon::parse($log->accessed_at)->diffForHumans(),
+                        'ip_address' => $log->ip_address ?? 'N/A',
+                    ];
+                })
+            ]);
+            
+        } catch (\Exception $e) {
+            Log::error('Failed to load access logs', ['error' => $e->getMessage()]);
+            return response()->json([
+                'logs' => [],
+                'error' => 'Unable to load access logs'
+            ], 500);
+        }
+    }
 }
