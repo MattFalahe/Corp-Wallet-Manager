@@ -15,6 +15,10 @@ Route::group([
     Route::get('/member', 'WalletController@member')
         ->name('corpwalletmanager.member')
         ->middleware('can:corpwalletmanager.member_view');
+
+    Route::get('/api/corporation-info', 'WalletController@getCorporationInfo')
+        ->name('corpwalletmanager.corporation-info')
+        ->middleware('can:corpwalletmanager.view');
  
     // API endpoints for data
     Route::get('/api/latest', 'WalletController@latest')
