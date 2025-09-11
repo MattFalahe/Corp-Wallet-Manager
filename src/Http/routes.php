@@ -65,6 +65,23 @@ Route::group([
     Route::get('/api/transaction-breakdown', 'WalletController@transactionBreakdown')
         ->name('corpwalletmanager.transaction-breakdown')
         ->middleware('can:corpwalletmanager.director_view');
+
+    // Member View API Routes
+    Route::get('/api/member/health', 'WalletController@memberHealth')
+        ->name('corpwalletmanager.member.health')
+        ->middleware('can:corpwalletmanager.member_view');
+    
+    Route::get('/api/member/goals', 'WalletController@memberGoals')
+        ->name('corpwalletmanager.member.goals')
+        ->middleware('can:corpwalletmanager.member_view');
+    
+    Route::get('/api/member/milestones', 'WalletController@memberMilestones')
+        ->name('corpwalletmanager.member.milestones')
+        ->middleware('can:corpwalletmanager.member_view');
+    
+    Route::post('/api/member/log-access', 'WalletController@logMemberAccess')
+        ->name('corpwalletmanager.member.log-access')
+        ->middleware('can:corpwalletmanager.member_view');
     
     // ===== NEW ANALYTICS ROUTES =====
     
