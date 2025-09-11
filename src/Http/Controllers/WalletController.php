@@ -32,6 +32,57 @@ class WalletController extends Controller
         
         return $corporationId;
     }
+
+    /**
+     * Get corporation info (name) by ID
+     */
+    public function getCorporationInfo(Request $request)
+    {
+        try {
+            $corporationId = $request->get('corporation_id');
+            
+            if (!$corporationId) {
+                return response()->json(['name' => null]);
+            }
+            
+            // Try to get from corporation_infos table
+            $corpInfo = DB::table('corporation_infos')
+                ->where('corporation_id', $corporationId)
+                ->first();
+            
+            if ($corpInfo) {
+                return response()->json([
+                    'corporation_id' => $corporationId,
+                    'name' => $corpInfo->name
+                ]);
+            }
+            
+            // Fallback: try corporation_divisions to at least get some name
+            $division = DB::table('corporation_divisions')
+                ->where('corporation_id', $corporationId)
+                ->first();
+            
+            if ($division && isset($division->corporation_name)) {
+                return response()->json([
+                    'corporation_id' => $corporationId,
+                    'name' => $division->corporation_name
+                ]);
+            }
+            
+            // No name found
+            return response()->json([
+                'corporation_id' => $corporationId,
+                'name' => null
+            ]);
+            
+        } catch (\Exception $e) {
+            Log::error('getCorporationInfo error', [
+                'error' => $e->getMessage()
+            ]);
+            
+            return response()->json(['name' => null]);
+        }
+    }
     
     // ========== VIEW METHODS ==========
     
