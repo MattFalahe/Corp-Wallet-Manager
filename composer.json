@@ -1,0 +1,31 @@
+{
+  "name": "mattfalahe/corp-wallet-manager",
+  "description": "CorpWallet Manager - SeAT plugin for corporation wallet tracking and predictions",
+  "type": "seat-plugin",
+  "license": "GPL-2.0-or-later",
+  "authors": [
+    {
+      "name": "Matt Falahe",
+      "email": "mattfalahe@gmail.com"
+    }
+  ],
+  "require": {
+    "php": "^8.1",
+    "laravel/framework": "^10.0",
+    "eveseat/web": "^5.0"
+  },
+  "autoload": {
+    "psr-4": {
+      "Seat\\CorpWalletManager\\": "src/"
+    }
+  },
+  "extra": {
+    "laravel": {
+      "providers": [
+        "Seat\\CorpWalletManager\\CorpWalletManagerServiceProvider"
+      ]
+    }
+  },
+  "minimum-stability": "dev",
+  "prefer-stable": true
+}
