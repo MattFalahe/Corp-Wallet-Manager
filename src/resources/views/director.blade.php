@@ -702,7 +702,8 @@
 @stop
 
 @push('javascript')
-<script src="https://cdn.jsdelivr.net/npm/chart.js@3.9.1/dist/chart.min.js"></script>
+{{-- Load Chart.js from plugin assets to avoid CSP issues --}}
+<script src="{{ asset('web/corpwalletmanager/js/chart.min.js') }}"></script>
 <script>
 // Fix SeAT's mixed content issue first
 (function() {
