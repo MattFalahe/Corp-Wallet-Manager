@@ -857,6 +857,238 @@ class AnalyticsController extends Controller
         }
     }
 
+    /**
+     * Get last month's closing balance
+     */
+    public function lastMonthBalance(Request $request)
+    {
+        try {
+            $corporationId = $this->getCorporationId($request);
+            
+            // Get last month's last day
+            $lastMonth = Carbon::now()->subMonth()->endOfMonth();
+            $lastMonthStart = Carbon::now()->subMonth()->startOfMonth();
+            
+            // Get the balance at the end of last month
+            $query = DB::table('corporation_wallet_journals')
+                ->where('date', '<=', $lastMonth)
+                ->where('date', '>=', $lastMonthStart);
+            
+            if ($corporationId) {
+                $query->where('corporation_id', $corporationId);
+            }
+            
+            // Get the last balance entry for the month
+            $lastEntry = $query->orderBy('date', 'desc')
+                ->orderBy('id', 'desc')
+                ->first();
+            
+            $closingBalance = 0;
+            
+            if ($lastEntry) {
+                // Use the balance from the last journal entry
+                $closingBalance = (float)$lastEntry->balance;
+            } else {
+                // If no journal entries, try to get from corporation_wallet_balances
+                $balanceQuery = DB::table('corporation_wallet_balances')
+                    ->selectRaw('SUM(balance) as total');
+                
+                if ($corporationId) {
+                    $balanceQuery->where('corporation_id', $corporationId);
+                }
+                
+                $result = $balanceQuery->first();
+                $closingBalance = $result ? (float)$result->total : 0;
+            }
+            
+            return response()->json([
+                'closing_balance' => $closingBalance,
+                'month' => $lastMonthStart->format('Y-m'),
+                'date' => $lastMonth->format('Y-m-d'),
+                'corporation_id' => $corporationId
+            ]);
+            
+        } catch (\Exception $e) {
+            Log::error('AnalyticsController lastMonthBalance error', [
+                'error' => $e->getMessage()
+            ]);
+            
+            return response()->json([
+                'error' => 'Unable to fetch last month balance',
+                'closing_balance' => 0,
+                'month' => Carbon::now()->subMonth()->format('Y-m')
+            ], 500);
+        }
+    }
+    
+    /**
+     * Get division-specific daily cash flow
+     */
+    public function divisionDailyCashFlow(Request $request)
+    {
+        try {
+            $corporationId = $this->getCorporationId($request);
+            $divisionId = $request->get('division_id');
+            $days = min(max((int)$request->get('days', 30), 7), 90);
+            
+            if (!$corporationId) {
+                return response()->json([
+                    'error' => 'Corporation ID required for division data',
+                    'labels' => [],
+                    'datasets' => []
+                ], 400);
+            }
+            
+            if (!$divisionId) {
+                return response()->json([
+                    'error' => 'Division ID required',
+                    'labels' => [],
+                    'datasets' => []
+                ], 400);
+            }
+            
+            $startDate = Carbon::now()->subDays($days);
+            
+            $query = DB::table('corporation_wallet_journals')
+                ->where('corporation_id', $corporationId)
+                ->where('division', $divisionId)
+                ->whereDate('date', '>=', $startDate)
+                ->selectRaw('
+                    DATE(date) as day,
+                    SUM(CASE WHEN amount > 0 THEN amount ELSE 0 END) as daily_income,
+                    SUM(CASE WHEN amount < 0 THEN ABS(amount) ELSE 0 END) as daily_expenses,
+                    SUM(amount) as net_flow,
+                    COUNT(*) as transaction_count
+                ')
+                ->groupBy('day')
+                ->orderBy('day');
+            
+            $dailyData = $query->get();
+            
+            // Get division name - using the helper method properly
+            $divisionNames = $this->getDivisionNames($corporationId);
+            $divisionName = $divisionNames[$divisionId] ?? "Division {$divisionId}";
+            
+            // Format for chart
+            $labels = [];
+            $income = [];
+            $expenses = [];
+            $netFlow = [];
+            $cumulative = 0;
+            $cumulativeFlow = [];
+            
+            foreach ($dailyData as $day) {
+                $labels[] = Carbon::parse($day->day)->format('M d');
+                $income[] = (float)$day->daily_income;
+                $expenses[] = -(float)$day->daily_expenses;
+                $netFlow[] = (float)$day->net_flow;
+                
+                $cumulative += (float)$day->net_flow;
+                $cumulativeFlow[] = $cumulative;
+            }
+            
+            // Calculate statistics
+            $totalIncome = array_sum($income);
+            $totalExpenses = abs(array_sum($expenses));
+            $avgDailyFlow = count($netFlow) > 0 ? array_sum($netFlow) / count($netFlow) : 0;
+            
+            return response()->json([
+                'division_id' => $divisionId,
+                'division_name' => $divisionName,
+                'labels' => $labels,
+                'datasets' => [
+                    'income' => $income,
+                    'expenses' => $expenses,
+                    'net_flow' => $netFlow,
+                    'cumulative' => $cumulativeFlow
+                ],
+                'statistics' => [
+                    'total_income' => $totalIncome,
+                    'total_expenses' => $totalExpenses,
+                    'net_total' => $totalIncome - $totalExpenses,
+                    'average_daily_flow' => round($avgDailyFlow, 2),
+                    'days_positive' => count(array_filter($netFlow, function($v) { return $v > 0; })),
+                    'days_negative' => count(array_filter($netFlow, function($v) { return $v < 0; })),
+                ],
+                'period' => [
+                    'start' => $startDate->format('Y-m-d'),
+                    'end' => Carbon::now()->format('Y-m-d'),
+                    'days' => $days
+                ]
+            ]);
+            
+        } catch (\Exception $e) {
+            Log::error('AnalyticsController divisionDailyCashFlow error', [
+                'error' => $e->getMessage(),
+                'trace' => $e->getTraceAsString(),
+                'corporation_id' => $request->get('corporation_id'),
+                'division_id' => $request->get('division_id')
+            ]);
+            
+            return response()->json([
+                'error' => 'Unable to fetch division cash flow data',
+                'labels' => [],
+                'datasets' => []
+            ], 500);
+        }
+    }
+    
+    /**
+     * Get all divisions list with basic info
+     */
+    public function divisionsList(Request $request)
+    {
+        try {
+            $corporationId = $this->getCorporationId($request);
+            
+            if (!$corporationId) {
+                $corporationId = DB::table('corporation_wallet_balances')
+                    ->whereNotNull('corporation_id')
+                    ->value('corporation_id');
+            }
+            
+            if (!$corporationId) {
+                return response()->json(['divisions' => []]);
+            }
+            
+            // Get current balances and division info
+            $divisions = DB::table('corporation_wallet_balances')
+                ->where('corporation_id', $corporationId)
+                ->get();
+            
+            $divisionNames = $this->getDivisionNames($corporationId);
+            
+            $result = [];
+            foreach ($divisions as $div) {
+                $result[] = [
+                    'id' => $div->division,
+                    'name' => $divisionNames[$div->division] ?? "Division {$div->division}",
+                    'balance' => (float)$div->balance
+                ];
+            }
+            
+            // Sort by division ID
+            usort($result, function($a, $b) {
+                return $a['id'] <=> $b['id'];
+            });
+            
+            return response()->json([
+                'divisions' => $result,
+                'corporation_id' => $corporationId
+            ]);
+            
+        } catch (\Exception $e) {
+            Log::error('AnalyticsController divisionsList error', [
+                'error' => $e->getMessage()
+            ]);
+            
+            return response()->json([
+                'error' => 'Unable to fetch divisions list',
+                'divisions' => []
+            ], 500);
+        }
+    }
+
     // ========== HELPER METHODS ==========
     
     /**

@@ -7,7 +7,7 @@ Route::group([
     'prefix' => 'corp-wallet-manager',
 ], function () {
     
-    // Main views - using new permission format
+    // Main views
     Route::get('/director', 'WalletController@director')
         ->name('corpwalletmanager.director')
         ->middleware('can:corpwalletmanager.director_view');
@@ -15,6 +15,10 @@ Route::group([
     Route::get('/member', 'WalletController@member')
         ->name('corpwalletmanager.member')
         ->middleware('can:corpwalletmanager.member_view');
+
+    Route::get('/api/corporation-info', 'WalletController@getCorporationInfo')
+        ->name('corpwalletmanager.corporation-info')
+        ->middleware('can:corpwalletmanager.view');
  
     // API endpoints for data
     Route::get('/api/latest', 'WalletController@latest')
@@ -41,7 +45,7 @@ Route::group([
         ->name('corpwalletmanager.wallet-actual')
         ->middleware('can:corpwalletmanager.director_view');
 
-    // New APIs for Director View data
+    // APIs for Director View data
     Route::get('/api/today', 'WalletController@today')
         ->name('corpwalletmanager.today')
         ->middleware('can:corpwalletmanager.view');
@@ -61,8 +65,41 @@ Route::group([
     Route::get('/api/transaction-breakdown', 'WalletController@transactionBreakdown')
         ->name('corpwalletmanager.transaction-breakdown')
         ->middleware('can:corpwalletmanager.director_view');
+
+    // Member View API Routes
+    Route::get('/api/member/health', 'WalletController@memberHealth')
+        ->name('corpwalletmanager.member.health')
+        ->middleware('can:corpwalletmanager.member_view');
     
-    // ===== NEW ANALYTICS ROUTES =====
+    Route::get('/api/member/goals', 'WalletController@memberGoals')
+        ->name('corpwalletmanager.member.goals')
+        ->middleware('can:corpwalletmanager.member_view');
+    
+    Route::get('/api/member/milestones', 'WalletController@memberMilestones')
+        ->name('corpwalletmanager.member.milestones')
+        ->middleware('can:corpwalletmanager.member_view');
+    
+    Route::get('/api/member/activity', 'WalletController@memberActivity')
+        ->name('corpwalletmanager.member.activity')
+        ->middleware('can:corpwalletmanager.member_view');
+    
+    Route::get('/api/member/performance-metrics', 'WalletController@memberPerformanceMetrics')
+        ->name('corpwalletmanager.member.performance-metrics')
+        ->middleware('can:corpwalletmanager.member_view');
+    
+    Route::get('/api/member/weekly-pattern', 'WalletController@memberWeeklyPattern')
+        ->name('corpwalletmanager.member.weekly-pattern')
+        ->middleware('can:corpwalletmanager.member_view');
+    
+    Route::get('/api/member/monthly-summary', 'WalletController@memberMonthlySummary')
+        ->name('corpwalletmanager.member.monthly-summary')
+        ->middleware('can:corpwalletmanager.member_view');
+    
+    Route::post('/api/member/log-access', 'WalletController@logMemberAccess')
+        ->name('corpwalletmanager.member.log-access')
+        ->middleware('can:corpwalletmanager.member_view');
+    
+    // ===== ANALYTICS ROUTES =====
     
     // Analytics Tab Routes
     Route::get('/api/analytics/health-score', 'AnalyticsController@healthScore')
@@ -97,6 +134,19 @@ Route::group([
     // Performance Tab Routes
     Route::get('/api/analytics/division-performance', 'AnalyticsController@divisionPerformance')
         ->name('corpwalletmanager.analytics.division-performance')
+        ->middleware('can:corpwalletmanager.director_view');
+
+    // Cash Flow Tab Routes
+    Route::get('/api/analytics/last-month-balance', 'AnalyticsController@lastMonthBalance')
+        ->name('corpwalletmanager.analytics.last-month-balance')
+        ->middleware('can:corpwalletmanager.director_view');
+    
+    Route::get('/api/analytics/division-daily-cashflow', 'AnalyticsController@divisionDailyCashFlow')
+        ->name('corpwalletmanager.analytics.division-daily-cashflow')
+        ->middleware('can:corpwalletmanager.director_view');
+    
+    Route::get('/api/analytics/divisions-list', 'AnalyticsController@divisionsList')
+        ->name('corpwalletmanager.analytics.divisions-list')
         ->middleware('can:corpwalletmanager.director_view');
     
     // Reports Tab Routes
@@ -137,9 +187,14 @@ Route::group([
     Route::get('/settings/job-status', 'SettingsController@jobStatus')
         ->name('corpwalletmanager.settings.job-status')
         ->middleware('can:corpwalletmanager.settings');
+
+    Route::get('/settings/access-logs', 'SettingsController@getAccessLogs')
+        ->name('corpwalletmanager.settings.access-logs')
+        ->middleware('can:corpwalletmanager.settings');
     
-    // New route for getting selected corporation settings
+    // Route for getting selected corporation settings
     Route::get('/api/selected-corporation', 'SettingsController@getSelectedCorporation')
         ->name('corpwalletmanager.selected-corporation')
         ->middleware('can:corpwalletmanager.view');
+
 });

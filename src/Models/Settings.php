@@ -65,7 +65,15 @@ class Settings extends Model
     {
         try {
             $value = static::getSetting($key, $default ? '1' : '0');
-            return in_array(strtolower($value), ['1', 'true', 'on', 'yes'], true);
+            
+            // Handle various true values
+            if (is_bool($value)) {
+                return $value;
+            }
+            
+            // Check for string true values
+            return in_array(strtolower((string)$value), ['1', 'true', 'on', 'yes'], true);
+            
         } catch (\Exception $e) {
             Log::warning('Settings: Failed to get boolean setting', [
                 'key' => $key,
