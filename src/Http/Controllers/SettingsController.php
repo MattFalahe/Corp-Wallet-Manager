@@ -5,6 +5,8 @@ use Illuminate\Routing\Controller;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Schema; 
+use Carbon\Carbon; 
 use Seat\CorpWalletManager\Models\Settings;
 use Seat\CorpWalletManager\Models\RecalcLog;
 use Seat\CorpWalletManager\Jobs\BackfillWalletData;
@@ -25,28 +27,49 @@ class SettingsController extends Controller
             // Provide default values if not set
             $defaultSettings = [
                 'refresh_interval' => config('corpwalletmanager.refresh_interval', 60000),
-                'refresh_minutes' => '5', // New default
+                'refresh_minutes' => '5',
                 'color_actual' => config('corpwalletmanager.color_actual', '#4cafef'),
                 'color_predicted' => config('corpwalletmanager.color_predicted', '#ef4444'),
                 'decimals' => config('corpwalletmanager.decimals', 2),
                 'use_precomputed_predictions' => config('corpwalletmanager.use_precomputed_predictions', true),
                 'use_precomputed_monthly_balances' => config('corpwalletmanager.use_precomputed_monthly_balances', true),
-                'selected_corporation_id' => null, // New setting
+                'selected_corporation_id' => null,
+                // Member view settings defaults
+                'member_show_health' => '1',
+                'member_show_trends' => '1',
+                'member_show_activity' => '1',
+                'member_show_goals' => '1',
+                'member_show_milestones' => '1',
+                'member_show_balance' => '1',
+                'member_show_performance' => '1',
+                'member_data_delay' => '0',
+                'goal_savings_target' => '1000000000',
+                'goal_activity_target' => '1000',
+                'goal_growth_target' => '10',
             ];
             
+            // Merge defaults with saved settings
             $settings = array_merge($defaultSettings, $settings);
+            
+            // Convert string '1'/'0' to boolean for checkboxes
+            foreach (['use_precomputed_predictions', 'use_precomputed_monthly_balances', 
+                      'member_show_health', 'member_show_trends', 'member_show_activity',
+                      'member_show_goals', 'member_show_milestones', 'member_show_balance',
+                      'member_show_performance'] as $key) {
+                if (isset($settings[$key])) {
+                    $settings[$key] = in_array($settings[$key], ['1', 'true', true], true);
+                }
+            }
             
             // Get available corporations from the database
             $corporations = [];
             try {
-                // Try to get corporations from SeAT's corporation_infos table
                 if (DB::getSchemaBuilder()->hasTable('corporation_infos')) {
                     $corporations = DB::table('corporation_infos')
                         ->select('corporation_id', 'name')
                         ->orderBy('name')
                         ->get();
                 } else {
-                    // Fallback: get from wallet data
                     $corporations = DB::table('corporation_wallet_balances')
                         ->distinct()
                         ->selectRaw('corporation_id, corporation_id as name')
@@ -78,48 +101,105 @@ class SettingsController extends Controller
     public function update(Request $request)
     {
         try {
+            // Log ALL request data
+            Log::info('=== SETTINGS UPDATE DEBUG ===');
+            Log::info('All request data:', $request->all());
+            Log::info('Request method: ' . $request->method());
+            
+            // Check specific checkbox values
+            Log::info('Checkbox checks:');
+            Log::info('member_show_balance input: ' . json_encode($request->input('member_show_balance')));
+            Log::info('member_show_balance has: ' . ($request->has('member_show_balance') ? 'YES' : 'NO'));
+            Log::info('member_show_balance filled: ' . ($request->filled('member_show_balance') ? 'YES' : 'NO'));
+            
             $request->validate([
                 'refresh_minutes' => 'required|in:0,5,15,30,60',
                 'color_actual' => 'required|string|regex:/^#[0-9A-Fa-f]{6}$/',
                 'color_predicted' => 'required|string|regex:/^#[0-9A-Fa-f]{6}$/',
                 'decimals' => 'required|integer|min:0|max:8',
-                'use_precomputed_predictions' => 'boolean',
-                'use_precomputed_monthly_balances' => 'boolean',
                 'selected_corporation_id' => 'nullable|numeric',
             ]);
-
-            // Convert refresh_minutes to milliseconds for refresh_interval
+    
+            // Convert refresh_minutes to milliseconds
             $refreshMinutes = $request->input('refresh_minutes');
             $refreshInterval = $refreshMinutes == '0' ? 0 : ($refreshMinutes * 60 * 1000);
-
+    
+            // For checkboxes, check if they exist in the request
+            // When a checkbox is unchecked, it won't be in the request at all
+            $checkboxFields = [
+                'use_precomputed_predictions',
+                'use_precomputed_monthly_balances',
+                'member_show_health',
+                'member_show_trends',
+                'member_show_activity',
+                'member_show_goals',
+                'member_show_milestones',
+                'member_show_balance',
+                'member_show_performance',
+            ];
+            
+            // Build settings array
             $settingsToUpdate = [
                 'refresh_interval' => $refreshInterval,
                 'refresh_minutes' => $refreshMinutes,
                 'color_actual' => $request->input('color_actual'),
                 'color_predicted' => $request->input('color_predicted'),
                 'decimals' => $request->input('decimals'),
-                'use_precomputed_predictions' => $request->input('use_precomputed_predictions', false) ? '1' : '0',
-                'use_precomputed_monthly_balances' => $request->input('use_precomputed_monthly_balances', false) ? '1' : '0',
-                'selected_corporation_id' => $request->input('selected_corporation_id'),
+                'selected_corporation_id' => $request->input('selected_corporation_id', ''),
+                'member_data_delay' => $request->input('member_data_delay', '0'),
+                'goal_savings_target' => $request->input('goal_savings_target', '1000000000'),
+                'goal_activity_target' => $request->input('goal_activity_target', '1000'),
+                'goal_growth_target' => $request->input('goal_growth_target', '10'),
             ];
-
+            
+            // Handle checkboxes
+            foreach ($checkboxFields as $field) {
+                // If the field exists in the request with any value, it's checked
+                // If it doesn't exist at all, it's unchecked
+                $value = $request->has($field) ? '1' : '0';
+                $settingsToUpdate[$field] = $value;
+                
+                Log::info("Checkbox {$field}: has=" . ($request->has($field) ? 'YES' : 'NO') . ", value will be: {$value}");
+            }
+    
+            Log::info('Final settings to update:', $settingsToUpdate);
+    
+            // Update each setting
             foreach ($settingsToUpdate as $key => $value) {
-                if ($value !== null) {
-                    Settings::setSetting($key, is_bool($value) ? ($value ? '1' : '0') : $value);
+                $setting = Settings::where('key', $key)->first();
+                
+                if ($setting) {
+                    $oldValue = $setting->value;
+                    $setting->value = (string)$value;
+                    $setting->updated_at = now();
+                    $setting->save();
+                    
+                    Log::info("Updated {$key}: '{$oldValue}' -> '{$value}'");
+                } else {
+                    Settings::create([
+                        'key' => $key,
+                        'value' => (string)$value,
+                        'created_at' => now(),
+                        'updated_at' => now(),
+                    ]);
+                    
+                    Log::info("Created {$key}: '{$value}'");
                 }
             }
-
-            Log::info('CorpWalletManager settings updated successfully');
-
+    
+            Log::info('=== SETTINGS UPDATE COMPLETE ===');
+    
             return redirect()
                 ->route('corpwalletmanager.settings')
-                ->with('success', 'Settings updated successfully!');
+                ->with('success', 'Settings updated successfully! Check logs for debug info.');
                 
         } catch (\Exception $e) {
-            Log::error('CorpWalletManager settings update error: ' . $e->getMessage());
+            Log::error('Settings update error: ' . $e->getMessage());
+            Log::error('Stack trace: ' . $e->getTraceAsString());
+            
             return redirect()
                 ->route('corpwalletmanager.settings')
-                ->with('error', 'Failed to update settings. Please check logs.');
+                ->with('error', 'Failed to update settings: ' . $e->getMessage());
         }
     }
 
@@ -354,6 +434,65 @@ class SettingsController extends Controller
             return response()->json([
                 'error' => 'Unable to fetch corporation settings',
                 'corporation_id' => null
+            ], 500);
+        }
+    }
+
+    /**
+     * Get access logs via AJAX
+     */
+    public function getAccessLogs(Request $request)
+    {
+        try {
+            // Check if the table exists first
+            if (!Schema::hasTable('corpwalletmanager_access_logs')) {
+                return response()->json([
+                    'logs' => [],
+                    'message' => 'Access logs table not found. Please run migrations.'
+                ]);
+            }
+            
+            $logsQuery = DB::table('corpwalletmanager_access_logs as al');
+            
+            // Check if users table exists for join
+            if (Schema::hasTable('users')) {
+                $logsQuery->leftJoin('users as u', 'al.user_id', '=', 'u.id');
+            }
+            
+            // Check if corporation_infos table exists
+            if (Schema::hasTable('corporation_infos')) {
+                $logsQuery->leftJoin('corporation_infos as c', 'al.corporation_id', '=', 'c.corporation_id');
+            }
+            
+            $logs = $logsQuery
+                ->select(
+                    Schema::hasTable('users') ? 'u.name as user_name' : DB::raw('al.user_id as user_name'),
+                    'al.view_type',
+                    Schema::hasTable('corporation_infos') ? 'c.name as corporation_name' : DB::raw('al.corporation_id as corporation_name'),
+                    'al.accessed_at',
+                    'al.ip_address'
+                )
+                ->orderBy('al.accessed_at', 'desc')
+                ->limit(50)
+                ->get();
+                
+            return response()->json([
+                'logs' => $logs->map(function ($log) {
+                    return [
+                        'user' => is_numeric($log->user_name) ? 'User #' . $log->user_name : ($log->user_name ?? 'Unknown'),
+                        'view' => ucfirst($log->view_type),
+                        'corporation' => is_numeric($log->corporation_name) ? 'Corp #' . $log->corporation_name : ($log->corporation_name ?? 'All'),
+                        'accessed_at' => Carbon::parse($log->accessed_at)->diffForHumans(),
+                        'ip_address' => $log->ip_address ?? 'N/A',
+                    ];
+                })
+            ]);
+            
+        } catch (\Exception $e) {
+            Log::error('Failed to load access logs', ['error' => $e->getMessage()]);
+            return response()->json([
+                'logs' => [],
+                'error' => 'Unable to load access logs'
             ], 500);
         }
     }

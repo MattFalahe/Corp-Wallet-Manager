@@ -9,6 +9,7 @@ use Illuminate\Support\Facades\DB;
 use Seat\CorpWalletManager\Models\Settings;
 use Seat\CorpWalletManager\Models\Prediction;
 use Seat\CorpWalletManager\Models\MonthlyBalance;
+use Seat\CorpWalletManager\Models\DivisionBalance;
 
 class WalletController extends Controller
 {
@@ -32,6 +33,57 @@ class WalletController extends Controller
         
         return $corporationId;
     }
+
+    /**
+     * Get corporation info (name) by ID
+     */
+    public function getCorporationInfo(Request $request)
+    {
+        try {
+            $corporationId = $request->get('corporation_id');
+            
+            if (!$corporationId) {
+                return response()->json(['name' => null]);
+            }
+            
+            // Try to get from corporation_infos table
+            $corpInfo = DB::table('corporation_infos')
+                ->where('corporation_id', $corporationId)
+                ->first();
+            
+            if ($corpInfo) {
+                return response()->json([
+                    'corporation_id' => $corporationId,
+                    'name' => $corpInfo->name
+                ]);
+            }
+            
+            // Fallback: try corporation_divisions to at least get some name
+            $division = DB::table('corporation_divisions')
+                ->where('corporation_id', $corporationId)
+                ->first();
+            
+            if ($division && isset($division->corporation_name)) {
+                return response()->json([
+                    'corporation_id' => $corporationId,
+                    'name' => $division->corporation_name
+                ]);
+            }
+            
+            // No name found
+            return response()->json([
+                'corporation_id' => $corporationId,
+                'name' => null
+            ]);
+            
+        } catch (\Exception $e) {
+            Log::error('getCorporationInfo error', [
+                'error' => $e->getMessage()
+            ]);
+            
+            return response()->json(['name' => null]);
+        }
+    }
     
     // ========== VIEW METHODS ==========
     
@@ -48,10 +100,35 @@ class WalletController extends Controller
     public function member()
     {
         try {
-            return view('corpwalletmanager::member');
+            // Get all member view settings
+            $settings = [
+                'member_show_health' => Settings::getBooleanSetting('member_show_health', true),
+                'member_show_trends' => Settings::getBooleanSetting('member_show_trends', true),
+                'member_show_activity' => Settings::getBooleanSetting('member_show_activity', true),
+                'member_show_goals' => Settings::getBooleanSetting('member_show_goals', true),
+                'member_show_milestones' => Settings::getBooleanSetting('member_show_milestones', true),
+                'member_show_balance' => Settings::getBooleanSetting('member_show_balance', true),
+                'member_show_performance' => Settings::getBooleanSetting('member_show_performance', true),
+                'member_data_delay' => Settings::getIntegerSetting('member_data_delay', 0),
+            ];
+            
+            return view('corpwalletmanager::member', compact('settings'));
         } catch (\Exception $e) {
             Log::error('CorpWalletManager member view error: ' . $e->getMessage());
-            return redirect()->back()->with('error', 'Unable to load member view. Please check logs.');
+            
+            // Fallback with default settings if there's an error
+            $settings = [
+                'member_show_health' => true,
+                'member_show_trends' => true,
+                'member_show_activity' => true,
+                'member_show_goals' => true,
+                'member_show_milestones' => true,
+                'member_show_balance' => true,
+                'member_show_performance' => true,
+                'member_data_delay' => 0,
+            ];
+            
+            return view('corpwalletmanager::member', compact('settings'));
         }
     }
 
@@ -767,8 +844,899 @@ class WalletController extends Controller
         }
     }
 
-    // ========== HELPER METHODS ==========
+    // ========== ADDITIONAL METHODS FOR MEMBER VIEW ==========
+
+    /**
+     * Get member-appropriate health status
+     */
+    public function memberHealth(Request $request)
+    {
+        try {
+            $corporationId = $this->getCorporationId($request);
+            
+            // Get basic health metrics without sensitive details
+            $currentMonth = Carbon::now()->format('Y-m');
+            $lastMonth = Carbon::now()->subMonth()->format('Y-m');
+            
+            // Current month balance trend
+            $currentQuery = MonthlyBalance::where('month', $currentMonth);
+            if ($corporationId) {
+                $currentQuery->where('corporation_id', $corporationId);
+            }
+            $currentBalance = (float)($currentQuery->sum('balance') ?? 0);
+            
+            // Last month balance
+            $lastQuery = MonthlyBalance::where('month', $lastMonth);
+            if ($corporationId) {
+                $lastQuery->where('corporation_id', $corporationId);
+            }
+            $lastBalance = (float)($lastQuery->sum('balance') ?? 0);
+            
+            // Calculate simple health score (0-100)
+            $healthScore = 50; // Base score
+            
+            // Positive balance adds points
+            if ($currentBalance > 0) {
+                $healthScore += 20;
+            }
+            
+            // Growth adds points
+            if ($currentBalance > $lastBalance) {
+                $growthRate = $lastBalance > 0 ? (($currentBalance - $lastBalance) / $lastBalance) : 0;
+                $healthScore += min(30, $growthRate * 100); // Max 30 points for growth
+            }
+            
+            // Check transaction activity
+            $transactionCount = DB::table('corporation_wallet_journals')
+                ->whereMonth('date', Carbon::now()->month)
+                ->whereYear('date', Carbon::now()->year);
+            
+            if ($corporationId) {
+                $transactionCount->where('corporation_id', $corporationId);
+            }
+            
+            $transactions = $transactionCount->count();
+            if ($transactions > 100) {
+                $healthScore = min(100, $healthScore + 10);
+            }
+            
+            return response()->json([
+                'health_score' => round($healthScore),
+                'has_positive_balance' => $currentBalance > 0,
+                'is_growing' => $currentBalance > $lastBalance,
+                'activity_level' => $transactions > 500 ? 'High' : ($transactions > 100 ? 'Medium' : 'Low'),
+            ]);
+            
+        } catch (\Exception $e) {
+            Log::error('Member health API error', ['error' => $e->getMessage()]);
+            return response()->json([
+                'health_score' => 50,
+                'has_positive_balance' => true,
+                'is_growing' => false,
+                'activity_level' => 'Unknown',
+            ], 500);
+        }
+    }
     
+    /**
+     * Enhanced member goals data with real calculations
+     */
+    public function memberGoals(Request $request)
+    {
+        try {
+            $corporationId = $this->getCorporationId($request);
+            
+            // Get goal settings
+            $savingsTarget = (float)Settings::getSetting('goal_savings_target', 1000000000);
+            $activityTarget = (int)Settings::getSetting('goal_activity_target', 1000);
+            $growthTarget = (float)Settings::getSetting('goal_growth_target', 10);
+            
+            // Get current balance
+            $currentBalance = DB::table('corporation_wallet_balances');
+            if ($corporationId) {
+                $currentBalance->where('corporation_id', $corporationId);
+            }
+            $balance = (float)($currentBalance->sum('balance') ?? 0);
+            
+            // Calculate savings percentage
+            $savingsPercentage = $savingsTarget > 0 ? min(100, ($balance / $savingsTarget) * 100) : 0;
+            
+            // Get current month activity
+            $currentMonth = Carbon::now();
+            $transactionCount = DB::table('corporation_wallet_journals')
+                ->whereMonth('date', $currentMonth->month)
+                ->whereYear('date', $currentMonth->year);
+            
+            if ($corporationId) {
+                $transactionCount->where('corporation_id', $corporationId);
+            }
+            $transactions = $transactionCount->count();
+            
+            // Calculate activity percentage
+            $activityPercentage = $activityTarget > 0 ? min(100, ($transactions / $activityTarget) * 100) : 0;
+            
+            // Calculate growth
+            $lastMonth = Carbon::now()->subMonth();
+            $lastMonthBalance = MonthlyBalance::where('month', $lastMonth->format('Y-m'));
+            if ($corporationId) {
+                $lastMonthBalance->where('corporation_id', $corporationId);
+            }
+            $previousBalance = (float)($lastMonthBalance->sum('balance') ?? 0);
+            
+            $growthRate = $previousBalance > 0 
+                ? (($balance - $previousBalance) / $previousBalance) * 100 
+                : 0;
+            
+            // Calculate growth percentage against target
+            $growthPercentage = $growthTarget > 0 ? min(100, max(0, ($growthRate / $growthTarget) * 100)) : 0;
+            
+            // Calculate stretch goals
+            $daysPositive = $this->calculateDaysPositive($corporationId);
+            $daysNegative = 30 - $daysPositive;
+            $allDivisionsProfit = $this->checkAllDivisionsProfit($corporationId);
+            
+            // Check if zero days below threshold (simplified: positive balance maintained)
+            $zeroNegativeDays = $daysNegative == 0;
+            
+            return response()->json([
+                'savings' => [
+                    'current' => $balance,
+                    'target' => $savingsTarget,
+                    'percentage' => round($savingsPercentage, 1),
+                ],
+                'activity' => [
+                    'current' => $transactions,
+                    'target' => $activityTarget,
+                    'percentage' => round($activityPercentage, 1),
+                ],
+                'growth' => [
+                    'current' => round($growthRate, 1),
+                    'target' => $growthTarget,
+                    'percentage' => round($growthPercentage, 1),
+                ],
+                'stretch_goals' => [
+                    'positive_cashflow_30_days' => $daysPositive >= 30,
+                    'zero_days_below_threshold' => $zeroNegativeDays,
+                    'all_divisions_profitable' => $allDivisionsProfit,
+                ],
+            ]);
+            
+        } catch (\Exception $e) {
+            Log::error('Member goals API error', ['error' => $e->getMessage()]);
+            return response()->json([
+                'error' => 'Unable to load goals',
+                'savings' => ['current' => 0, 'target' => 1000000000, 'percentage' => 0],
+                'activity' => ['current' => 0, 'target' => 1000, 'percentage' => 0],
+                'growth' => ['current' => 0, 'target' => 10, 'percentage' => 0],
+            ], 500);
+        }
+    }
+    
+    /**
+     * Enhanced member milestones with real data
+     */
+    public function memberMilestones(Request $request)
+    {
+        try {
+            $corporationId = $this->getCorporationId($request);
+            
+            $milestones = [];
+            $events = [];
+            
+            // Calculate days with positive balance
+            $daysPositive = $this->calculateDaysPositive($corporationId);
+            
+            // Add milestone based on positive days
+            if ($daysPositive >= 30) {
+                $milestones[] = [
+                    'icon' => 'fa-check-circle text-success',
+                    'text' => "Maintained positive balance for {$daysPositive} days",
+                    'achieved_at' => Carbon::now()->subDays(30)->format('Y-m-d'),
+                ];
+            } elseif ($daysPositive >= 15) {
+                $milestones[] = [
+                    'icon' => 'fa-check-circle text-info',
+                    'text' => "Positive balance streak: {$daysPositive} days",
+                    'achieved_at' => Carbon::now()->subDays(15)->format('Y-m-d'),
+                ];
+            } elseif ($daysPositive >= 7) {
+                $milestones[] = [
+                    'icon' => 'fa-check-circle text-warning',
+                    'text' => "Building momentum: {$daysPositive} days positive",
+                    'achieved_at' => Carbon::now()->subDays(7)->format('Y-m-d'),
+                ];
+            }
+            
+            // Check balance milestones
+            $currentBalance = DB::table('corporation_wallet_balances');
+            if ($corporationId) {
+                $currentBalance->where('corporation_id', $corporationId);
+            }
+            $balance = (float)($currentBalance->sum('balance') ?? 0);
+            
+            if ($balance >= 100000000000) { // 100B
+                $milestones[] = [
+                    'icon' => 'fa-trophy text-warning',
+                    'text' => 'Reached 100B ISK milestone!',
+                    'achieved_at' => Carbon::now()->format('Y-m-d'),
+                ];
+            } elseif ($balance >= 10000000000) { // 10B
+                $milestones[] = [
+                    'icon' => 'fa-trophy text-warning',
+                    'text' => 'Reached 10B ISK milestone',
+                    'achieved_at' => Carbon::now()->format('Y-m-d'),
+                ];
+            } elseif ($balance >= 1000000000) { // 1B
+                $milestones[] = [
+                    'icon' => 'fa-trophy text-info',
+                    'text' => 'Reached 1B ISK milestone',
+                    'achieved_at' => Carbon::now()->format('Y-m-d'),
+                ];
+            } elseif ($balance >= 500000000) { // 500M
+                $milestones[] = [
+                    'icon' => 'fa-trophy text-primary',
+                    'text' => 'Reached 500M ISK milestone',
+                    'achieved_at' => Carbon::now()->format('Y-m-d'),
+                ];
+            }
+            
+            // Check monthly activity milestones
+            $monthlyTransactions = DB::table('corporation_wallet_journals')
+                ->whereMonth('date', Carbon::now()->month)
+                ->whereYear('date', Carbon::now()->year);
+            
+            if ($corporationId) {
+                $monthlyTransactions->where('corporation_id', $corporationId);
+            }
+            $transactionCount = $monthlyTransactions->count();
+            
+            if ($transactionCount >= 5000) {
+                $milestones[] = [
+                    'icon' => 'fa-chart-line text-success',
+                    'text' => 'Exceptional activity: Over 5000 transactions this month!',
+                    'achieved_at' => Carbon::now()->format('Y-m-d'),
+                ];
+            } elseif ($transactionCount >= 1000) {
+                $milestones[] = [
+                    'icon' => 'fa-chart-line text-success',
+                    'text' => 'High activity: Over 1000 transactions this month',
+                    'achieved_at' => Carbon::now()->format('Y-m-d'),
+                ];
+            } elseif ($transactionCount >= 500) {
+                $milestones[] = [
+                    'icon' => 'fa-chart-line text-info',
+                    'text' => 'Good activity: Over 500 transactions this month',
+                    'achieved_at' => Carbon::now()->format('Y-m-d'),
+                ];
+            }
+            
+            // Check for best performance this quarter
+            $quarterStart = Carbon::now()->firstOfQuarter();
+            $bestWeekQuery = DB::table('corporation_wallet_journals')
+                ->where('date', '>=', $quarterStart)
+                ->selectRaw('YEARWEEK(date) as week, SUM(amount) as weekly_total')
+                ->groupBy('week')
+                ->orderBy('weekly_total', 'desc');
+            
+            if ($corporationId) {
+                $bestWeekQuery->where('corporation_id', $corporationId);
+            }
+            
+            $bestWeek = $bestWeekQuery->first();
+            $currentWeek = Carbon::now()->format('YW');
+            
+            if ($bestWeek && $bestWeek->week == $currentWeek) {
+                $milestones[] = [
+                    'icon' => 'fa-star text-warning',
+                    'text' => 'Best weekly performance in Q' . Carbon::now()->quarter,
+                    'achieved_at' => Carbon::now()->format('Y-m-d'),
+                ];
+            }
+            
+            // Add upcoming events
+            $daysInMonth = Carbon::now()->daysInMonth;
+            $currentDay = Carbon::now()->day;
+            $daysUntilMonthEnd = $daysInMonth - $currentDay;
+            
+            $events[] = [
+                'icon' => 'fa-calendar-check',
+                'text' => "{$daysUntilMonthEnd} days until month end",
+                'date' => Carbon::now()->endOfMonth()->format('Y-m-d'),
+            ];
+            
+            // Dividend dates (15th of each month or next month if passed)
+            $dividendDay = 15;
+            if ($currentDay <= $dividendDay) {
+                $daysUntilDividend = $dividendDay - $currentDay;
+                $dividendDate = Carbon::now()->day($dividendDay);
+            } else {
+                $nextMonth = Carbon::now()->addMonth()->day($dividendDay);
+                $daysUntilDividend = Carbon::now()->diffInDays($nextMonth);
+                $dividendDate = $nextMonth;
+            }
+            
+            $events[] = [
+                'icon' => 'fa-coins',
+                'text' => "{$daysUntilDividend} days until dividend payment",
+                'date' => $dividendDate->format('Y-m-d'),
+            ];
+            
+            // Quarterly review (first Monday of each quarter)
+            $quarterStart = Carbon::now()->firstOfQuarter();
+            $firstMonday = $quarterStart->copy()->next(Carbon::MONDAY);
+            
+            if (Carbon::now()->lt($firstMonday)) {
+                $daysUntilReview = Carbon::now()->diffInDays($firstMonday);
+                $events[] = [
+                    'icon' => 'fa-clipboard-check',
+                    'text' => "{$daysUntilReview} days until quarterly review",
+                    'date' => $firstMonday->format('Y-m-d'),
+                ];
+            } else {
+                // Next quarter's review
+                $nextQuarter = Carbon::now()->addQuarter()->firstOfQuarter()->next(Carbon::MONDAY);
+                $daysUntilReview = Carbon::now()->diffInDays($nextQuarter);
+                if ($daysUntilReview <= 30) {
+                    $events[] = [
+                        'icon' => 'fa-clipboard-check',
+                        'text' => "{$daysUntilReview} days until quarterly review",
+                        'date' => $nextQuarter->format('Y-m-d'),
+                    ];
+                }
+            }
+            
+            return response()->json([
+                'milestones' => $milestones,
+                'events' => $events,
+                'summary' => [
+                    'total_milestones' => count($milestones),
+                    'upcoming_events' => count($events),
+                ],
+            ]);
+            
+        } catch (\Exception $e) {
+            Log::error('Member milestones API error', ['error' => $e->getMessage()]);
+            return response()->json([
+                'milestones' => [],
+                'events' => [],
+                'summary' => ['total_milestones' => 0, 'upcoming_events' => 0],
+            ], 500);
+        }
+    }
+
+    /**
+     * Get activity level data with real metrics
+     */
+    public function memberActivity(Request $request)
+    {
+        try {
+            $corporationId = $this->getCorporationId($request);
+            
+            // Current month transactions
+            $currentMonth = Carbon::now();
+            $transactionQuery = DB::table('corporation_wallet_journals')
+                ->whereMonth('date', $currentMonth->month)
+                ->whereYear('date', $currentMonth->year);
+            
+            if ($corporationId) {
+                $transactionQuery->where('corporation_id', $corporationId);
+            }
+            
+            $currentTransactions = $transactionQuery->count();
+            
+            // Last month transactions for comparison
+            $lastMonth = Carbon::now()->subMonth();
+            $lastMonthQuery = DB::table('corporation_wallet_journals')
+                ->whereMonth('date', $lastMonth->month)
+                ->whereYear('date', $lastMonth->year);
+            
+            if ($corporationId) {
+                $lastMonthQuery->where('corporation_id', $corporationId);
+            }
+            
+            $lastMonthTransactions = $lastMonthQuery->count();
+            
+            // Calculate change
+            $change = $lastMonthTransactions > 0 
+                ? (($currentTransactions - $lastMonthTransactions) / $lastMonthTransactions) * 100
+                : 0;
+            
+            // Determine activity level
+            $level = 'Low';
+            if ($currentTransactions >= 1000) {
+                $level = 'Very High';
+            } elseif ($currentTransactions >= 500) {
+                $level = 'High';
+            } elseif ($currentTransactions >= 250) {
+                $level = 'Medium';
+            } elseif ($currentTransactions >= 100) {
+                $level = 'Low-Medium';
+            }
+            
+            return response()->json([
+                'level' => $level,
+                'transactions' => $currentTransactions,
+                'change' => round($change, 1),
+                'last_month_transactions' => $lastMonthTransactions,
+            ]);
+            
+        } catch (\Exception $e) {
+            Log::error('Member activity API error', ['error' => $e->getMessage()]);
+            return response()->json([
+                'level' => 'Unknown',
+                'transactions' => 0,
+                'change' => 0,
+            ], 500);
+        }
+    }
+    
+    /**
+     * Get performance metrics for radar chart
+     */
+    public function memberPerformanceMetrics(Request $request)
+    {
+        try {
+            $corporationId = $this->getCorporationId($request);
+            
+            // Calculate stability (based on daily variance)
+            $stabilityScore = $this->calculateStabilityScore($corporationId);
+            
+            // Calculate growth score
+            $growthScore = $this->calculateGrowthScore($corporationId);
+            
+            // Calculate activity score
+            $activityScore = $this->calculateActivityScore($corporationId);
+            
+            // Calculate efficiency score
+            $efficiencyScore = $this->calculateEfficiencyScore($corporationId);
+            
+            // Calculate compliance score (based on positive days)
+            $complianceScore = $this->calculateComplianceScore($corporationId);
+            
+            return response()->json([
+                'metrics' => [
+                    'stability' => round($stabilityScore, 1),
+                    'growth' => round($growthScore, 1),
+                    'activity' => round($activityScore, 1),
+                    'efficiency' => round($efficiencyScore, 1),
+                    'compliance' => round($complianceScore, 1),
+                ],
+                'labels' => ['Stability', 'Growth', 'Activity', 'Efficiency', 'Compliance'],
+            ]);
+            
+        } catch (\Exception $e) {
+            Log::error('Member performance metrics API error', ['error' => $e->getMessage()]);
+            return response()->json([
+                'metrics' => [
+                    'stability' => 50,
+                    'growth' => 50,
+                    'activity' => 50,
+                    'efficiency' => 50,
+                    'compliance' => 50,
+                ],
+                'labels' => ['Stability', 'Growth', 'Activity', 'Efficiency', 'Compliance'],
+            ], 500);
+        }
+    }
+    
+    /**
+     * Get weekly activity pattern
+     */
+    public function memberWeeklyPattern(Request $request)
+    {
+        try {
+            $corporationId = $this->getCorporationId($request);
+            $weeks = 4; // Last 4 weeks
+            
+            $startDate = Carbon::now()->subWeeks($weeks)->startOfWeek();
+            
+            $query = DB::table('corporation_wallet_journals')
+                ->where('date', '>=', $startDate)
+                ->selectRaw('
+                    DAYOFWEEK(date) as day_of_week,
+                    COUNT(*) as transaction_count,
+                    SUM(ABS(amount)) as volume
+                ')
+                ->groupBy('day_of_week')
+                ->orderBy('day_of_week');
+            
+            if ($corporationId) {
+                $query->where('corporation_id', $corporationId);
+            }
+            
+            $data = $query->get();
+            
+            // Map to day names and calculate activity percentage
+            $dayNames = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
+            $maxTransactions = $data->max('transaction_count') ?: 1;
+            
+            $patterns = [];
+            $labels = [];
+            $activity = [];
+            
+            // Initialize all days with 0
+            for ($i = 1; $i <= 7; $i++) {
+                $dayData = $data->firstWhere('day_of_week', $i);
+                $dayIndex = $i - 1;
+                $dayName = $dayNames[$dayIndex];
+                
+                // Remap to Monday-Sunday order
+                $displayOrder = [
+                    'Monday' => 0,
+                    'Tuesday' => 1,
+                    'Wednesday' => 2,
+                    'Thursday' => 3,
+                    'Friday' => 4,
+                    'Saturday' => 5,
+                    'Sunday' => 6,
+                ];
+                
+                $orderIndex = $displayOrder[$dayName];
+                
+                if ($dayData) {
+                    $activityLevel = ($dayData->transaction_count / $maxTransactions) * 100;
+                } else {
+                    $activityLevel = 0;
+                }
+                
+                $patterns[$orderIndex] = [
+                    'day' => $dayName,
+                    'transactions' => $dayData ? $dayData->transaction_count : 0,
+                    'volume' => $dayData ? (float)$dayData->volume : 0,
+                    'activity' => round($activityLevel, 1),
+                ];
+            }
+            
+            // Sort by display order
+            ksort($patterns);
+            
+            // Extract for chart
+            foreach ($patterns as $pattern) {
+                $labels[] = substr($pattern['day'], 0, 3); // Mon, Tue, etc.
+                $activity[] = $pattern['activity'];
+            }
+            
+            // Find best and worst days
+            $maxActivity = max($activity);
+            $minActivity = min($activity);
+            $bestDayIndex = array_search($maxActivity, $activity);
+            $worstDayIndex = array_search($minActivity, $activity);
+            
+            return response()->json([
+                'labels' => $labels,
+                'activity' => $activity,
+                'patterns' => array_values($patterns),
+                'best_day' => $labels[$bestDayIndex] ?? 'N/A',
+                'worst_day' => $labels[$worstDayIndex] ?? 'N/A',
+            ]);
+            
+        } catch (\Exception $e) {
+            Log::error('Member weekly pattern API error', ['error' => $e->getMessage()]);
+            return response()->json([
+                'labels' => ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'],
+                'activity' => [0, 0, 0, 0, 0, 0, 0],
+                'patterns' => [],
+                'best_day' => 'N/A',
+                'worst_day' => 'N/A',
+            ], 500);
+        }
+    }
+    
+    /**
+     * Get comprehensive monthly summary
+     */
+    public function memberMonthlySummary(Request $request)
+    {
+        try {
+            $corporationId = $this->getCorporationId($request);
+            
+            // Get balance change
+            $summaryData = $this->summary($request)->getData();
+            
+            // Get current month transactions
+            $currentMonth = Carbon::now();
+            $transactionQuery = DB::table('corporation_wallet_journals')
+                ->whereMonth('date', $currentMonth->month)
+                ->whereYear('date', $currentMonth->year);
+            
+            if ($corporationId) {
+                $transactionQuery->where('corporation_id', $corporationId);
+            }
+            
+            $currentTransactions = $transactionQuery->count();
+            
+            // Last month transactions
+            $lastMonth = Carbon::now()->subMonth();
+            $lastMonthQuery = DB::table('corporation_wallet_journals')
+                ->whereMonth('date', $lastMonth->month)
+                ->whereYear('date', $lastMonth->year);
+            
+            if ($corporationId) {
+                $lastMonthQuery->where('corporation_id', $corporationId);
+            }
+            
+            $lastMonthTransactions = $lastMonthQuery->count();
+            
+            // Calculate activity change
+            $activityChange = $lastMonthTransactions > 0 
+                ? (($currentTransactions - $lastMonthTransactions) / $lastMonthTransactions) * 100
+                : 0;
+            
+            // Calculate days positive
+            $daysPositive = $this->calculateDaysPositive($corporationId);
+            
+            // Calculate stability index (inverse of volatility)
+            $volatility = $this->calculateVolatility($corporationId);
+            $stabilityIndex = max(0, 100 - $volatility);
+            
+            return response()->json([
+                'current_balance' => $summaryData->current_month->balance ?? 0,
+                'balance_change_percent' => $summaryData->change->percent ?? 0,
+                'monthly_transactions' => $currentTransactions,
+                'activity_change_percent' => round($activityChange, 1),
+                'days_positive' => $daysPositive,
+                'stability_index' => round($stabilityIndex, 1),
+            ]);
+            
+        } catch (\Exception $e) {
+            Log::error('Member monthly summary API error', ['error' => $e->getMessage()]);
+            return response()->json([
+                'current_balance' => 0,
+                'balance_change_percent' => 0,
+                'monthly_transactions' => 0,
+                'activity_change_percent' => 0,
+                'days_positive' => 0,
+                'stability_index' => 0,
+            ], 500);
+        }
+    }
+    
+    // === HELPER METHODS FOR CALCULATIONS ===
+    
+    private function calculateStabilityScore($corporationId)
+    {
+        $thirtyDaysAgo = Carbon::now()->subDays(30);
+        
+        $query = DB::table('corporation_wallet_journals')
+            ->where('date', '>=', $thirtyDaysAgo)
+            ->selectRaw('DATE(date) as day, SUM(amount) as daily_change')
+            ->groupBy('day');
+        
+        if ($corporationId) {
+            $query->where('corporation_id', $corporationId);
+        }
+        
+        $dailyChanges = $query->pluck('daily_change')->toArray();
+        
+        if (empty($dailyChanges)) {
+            return 50;
+        }
+        
+        // Calculate coefficient of variation
+        $mean = array_sum($dailyChanges) / count($dailyChanges);
+        if ($mean == 0) {
+            return 50;
+        }
+        
+        $variance = 0;
+        foreach ($dailyChanges as $value) {
+            $variance += pow($value - $mean, 2);
+        }
+        $variance /= count($dailyChanges);
+        $stdDev = sqrt($variance);
+        
+        $coefficientOfVariation = abs($stdDev / $mean);
+        
+        // Convert to 0-100 score (lower CV = higher stability)
+        $stabilityScore = max(0, min(100, 100 - ($coefficientOfVariation * 50)));
+        
+        return $stabilityScore;
+    }
+    
+    private function calculateGrowthScore($corporationId)
+    {
+        $currentMonth = Carbon::now()->format('Y-m');
+        $lastMonth = Carbon::now()->subMonth()->format('Y-m');
+        
+        $currentQuery = MonthlyBalance::where('month', $currentMonth);
+        $lastQuery = MonthlyBalance::where('month', $lastMonth);
+        
+        if ($corporationId) {
+            $currentQuery->where('corporation_id', $corporationId);
+            $lastQuery->where('corporation_id', $corporationId);
+        }
+        
+        $currentBalance = (float)($currentQuery->sum('balance') ?? 0);
+        $lastBalance = (float)($lastQuery->sum('balance') ?? 0);
+        
+        if ($lastBalance <= 0) {
+            return $currentBalance > 0 ? 100 : 0;
+        }
+        
+        $growthRate = (($currentBalance - $lastBalance) / $lastBalance) * 100;
+        
+        // Convert to 0-100 score
+        // 20% growth = 100 score, -20% = 0 score
+        $growthScore = max(0, min(100, 50 + ($growthRate * 2.5)));
+        
+        return $growthScore;
+    }
+    
+    private function calculateActivityScore($corporationId)
+    {
+        $currentMonth = Carbon::now();
+        
+        $query = DB::table('corporation_wallet_journals')
+            ->whereMonth('date', $currentMonth->month)
+            ->whereYear('date', $currentMonth->year);
+        
+        if ($corporationId) {
+            $query->where('corporation_id', $corporationId);
+        }
+        
+        $transactions = $query->count();
+        
+        // Score based on transaction count
+        // 1000+ transactions = 100 score
+        $activityScore = min(100, ($transactions / 1000) * 100);
+        
+        return $activityScore;
+    }
+    
+    private function calculateEfficiencyScore($corporationId)
+    {
+        $thirtyDaysAgo = Carbon::now()->subDays(30);
+        
+        $query = DB::table('corporation_wallet_journals')
+            ->where('date', '>=', $thirtyDaysAgo)
+            ->selectRaw('
+                SUM(CASE WHEN amount > 0 THEN amount ELSE 0 END) as income,
+                SUM(CASE WHEN amount < 0 THEN ABS(amount) ELSE 0 END) as expenses
+            ');
+        
+        if ($corporationId) {
+            $query->where('corporation_id', $corporationId);
+        }
+        
+        $result = $query->first();
+        
+        if (!$result || $result->expenses == 0) {
+            return 50;
+        }
+        
+        $ratio = $result->income / $result->expenses;
+        
+        // Ratio of 1.5+ = 100 score, 0.5 = 0 score
+        $efficiencyScore = max(0, min(100, ($ratio - 0.5) * 66.67));
+        
+        return $efficiencyScore;
+    }
+    
+    private function calculateComplianceScore($corporationId)
+    {
+        $daysPositive = $this->calculateDaysPositive($corporationId);
+        
+        // 30 days positive = 100 score
+        $complianceScore = min(100, ($daysPositive / 30) * 100);
+        
+        return $complianceScore;
+    }
+    
+    private function calculateVolatility($corporationId)
+    {
+        $thirtyDaysAgo = Carbon::now()->subDays(30);
+        
+        $query = DB::table('corporation_wallet_journals')
+            ->where('date', '>=', $thirtyDaysAgo)
+            ->selectRaw('DATE(date) as day, SUM(amount) as daily_change')
+            ->groupBy('day');
+        
+        if ($corporationId) {
+            $query->where('corporation_id', $corporationId);
+        }
+        
+        $dailyChanges = $query->pluck('daily_change')->toArray();
+        
+        if (count($dailyChanges) < 2) {
+            return 0;
+        }
+        
+        $mean = array_sum($dailyChanges) / count($dailyChanges);
+        if ($mean == 0) {
+            return 50;
+        }
+        
+        $variance = 0;
+        foreach ($dailyChanges as $value) {
+            $variance += pow($value - $mean, 2);
+        }
+        $variance /= (count($dailyChanges) - 1);
+        $stdDev = sqrt($variance);
+        
+        // Return as percentage
+        return abs(($stdDev / abs($mean)) * 100);
+    }
+    
+    /**
+     * Log member access for tracking
+     */
+    public function logMemberAccess(Request $request)
+    {
+        try {
+            $userId = auth()->id();
+            $corporationId = $request->input('corporation_id');
+            
+            DB::table('corpwalletmanager_access_logs')->insert([
+                'user_id' => $userId,
+                'corporation_id' => $corporationId,
+                'view_type' => $request->input('view', 'member'),
+                'accessed_at' => Carbon::now(),
+                'ip_address' => $request->ip(),
+                'user_agent' => $request->userAgent(),
+            ]);
+            
+            return response()->json(['logged' => true]);
+            
+        } catch (\Exception $e) {
+            // Don't fail the request if logging fails
+            Log::warning('Failed to log member access', [
+                'error' => $e->getMessage(),
+                'user' => auth()->id(),
+            ]);
+            return response()->json(['logged' => false]);
+        }
+    }
+    
+    /**
+     * Calculate days with positive balance
+     */
+    private function calculateDaysPositive($corporationId)
+    {
+        $thirtyDaysAgo = Carbon::now()->subDays(30);
+        
+        $query = DB::table('corporation_wallet_journals')
+            ->selectRaw('DATE(date) as day, SUM(amount) as daily_change')
+            ->where('date', '>=', $thirtyDaysAgo)
+            ->groupBy('day');
+        
+        if ($corporationId) {
+            $query->where('corporation_id', $corporationId);
+        }
+        
+        $dailyChanges = $query->get();
+        $positiveDays = $dailyChanges->filter(function ($day) {
+            return $day->daily_change > 0;
+        })->count();
+        
+        return $positiveDays;
+    }
+    
+    /**
+     * Check if all divisions are profitable
+     */
+    private function checkAllDivisionsProfit($corporationId)
+    {
+        if (!$corporationId) {
+            return false;
+        }
+        
+        $currentMonth = Carbon::now()->format('Y-m');
+        
+        $divisions = DivisionBalance::where('corporation_id', $corporationId)
+            ->where('month', $currentMonth)
+            ->get();
+        
+        if ($divisions->isEmpty()) {
+            return false;
+        }
+        
+        return $divisions->every(function ($division) {
+            return $division->balance > 0;
+        });
+    }
+    
+    // ========== HELPER METHODS ==========
+
     /**
      * Helper function to get division names from database
      */
