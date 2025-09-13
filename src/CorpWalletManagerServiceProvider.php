@@ -18,6 +18,11 @@ class CorpWalletManagerServiceProvider extends AbstractSeatPlugin
         $this->loadViewsFrom(__DIR__ . '/resources/views/', 'corpwalletmanager');
         $this->loadMigrationsFrom(__DIR__ . '/database/migrations/');
 
+        // Publish plugin assets
+        $this->publishes([
+            __DIR__ . '/resources/assets' => public_path('web/corpwalletmanager'),
+        ], ['corpwalletmanager', 'assets']);
+
          // Register scheduled tasks
         $this->app->booted(function () {
             $schedule = $this->app->make(Schedule::class);
