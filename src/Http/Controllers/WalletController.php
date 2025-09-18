@@ -255,8 +255,7 @@ class WalletController extends Controller
     {
         try {
             $corporationId = $this->getCorporationId($request);
-
-            $days = min(max((int)$request->get('days', 30), 1), 365); // Between 1 and 365 days
+            $days = min(max((int)$request->get('days', 30), 1), 90);
             
             $startDate = Carbon::today();
             $endDate = $startDate->copy()->addDays($days);
@@ -267,25 +266,64 @@ class WalletController extends Controller
             if ($corporationId) {
                 $query->where('corporation_id', $corporationId);
             }
-
-            $predictions = $query->get()
-                ->groupBy('date')
-                ->map(function ($rows) {
-                    return (float)$rows->sum('predicted_balance');
-                });
-
-            $labels = $predictions->keys()->toArray();
-            $data = $predictions->values()->toArray();
-
+    
+            $predictions = $query->get();
+    
+            // Group by date and aggregate
+            $grouped = $predictions->groupBy('date')->map(function ($group) {
+                $sumBalance = $group->sum('predicted_balance');
+                $avgConfidence = $group->avg('confidence');
+                $sumLower68 = $group->sum('lower_bound');
+                $sumUpper68 = $group->sum('upper_bound');
+                
+                // Get metadata from first prediction in group
+                $metadata = $group->first()->metadata ?? [];
+                
+                return [
+                    'balance' => $sumBalance,
+                    'confidence' => round($avgConfidence, 1),
+                    'lower_68' => $sumLower68,
+                    'upper_68' => $sumUpper68,
+                    'lower_95' => $metadata['confidence_95_lower'] ?? null,
+                    'upper_95' => $metadata['confidence_95_upper'] ?? null,
+                    'factors' => [
+                        'seasonal' => $metadata['seasonal_factor'] ?? null,
+                        'momentum' => $metadata['momentum_factor'] ?? null,
+                        'activity' => $metadata['activity_factor'] ?? null,
+                    ]
+                ];
+            });
+    
+            $labels = $grouped->keys()->toArray();
+            $predictions = $grouped->pluck('balance')->toArray();
+            $confidenceValues = $grouped->pluck('confidence')->toArray();
+            
+            // Prepare confidence bands
+            $confidenceBands = [
+                'lower_68' => $grouped->pluck('lower_68')->toArray(),
+                'upper_68' => $grouped->pluck('upper_68')->toArray(),
+                'lower_95' => array_filter($grouped->pluck('lower_95')->toArray()),
+                'upper_95' => array_filter($grouped->pluck('upper_95')->toArray()),
+            ];
+            
+            // Get factors for tooltips
+            $factors = $grouped->pluck('factors')->toArray();
+    
             return response()->json([
                 'labels' => $labels,
-                'data' => $data,
+                'data' => $predictions,
+                'predictions' => $predictions, // For backwards compatibility
+                'confidence_values' => $confidenceValues,
+                'confidence_bands' => $confidenceBands,
+                'factors' => $factors,
                 'days_requested' => $days,
                 'corporation_id' => $corporationId,
+                'method' => 'advanced_weighted',
+                'based_on_months' => 12,
             ]);
-
+    
         } catch (\Exception $e) {
-            Log::error('CorpWalletManager predictions API error', [
+            Log::error('WalletController predictions API error', [
                 'error' => $e->getMessage(),
                 'corporation_id' => $request->get('corporation_id'),
                 'days' => $request->get('days')

@@ -318,8 +318,13 @@
 @stop
 
 @push('javascript')
-<script src="https://cdn.jsdelivr.net/npm/chart.js@3.9.1/dist/chart.min.js"></script>
+{{-- Load Chart.js from plugin assets to avoid CSP issues --}}
+<script src="{{ asset('corpwalletmanager/js/chart.min.js') }}"></script>
 <script>
+// Verify Chart.js loaded
+if (typeof Chart === 'undefined') {
+    console.error('Chart.js failed to load. Assets may not be published correctly.');
+}
 // Fix SeAT's mixed content issue
 (function() {
     if (typeof $ !== 'undefined' && $.ajax) {

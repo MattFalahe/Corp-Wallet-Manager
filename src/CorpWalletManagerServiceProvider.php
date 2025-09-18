@@ -18,6 +18,9 @@ class CorpWalletManagerServiceProvider extends AbstractSeatPlugin
         $this->loadViewsFrom(__DIR__ . '/resources/views/', 'corpwalletmanager');
         $this->loadMigrationsFrom(__DIR__ . '/database/migrations/');
 
+        // Add publications
+        $this->add_publications();
+
          // Register scheduled tasks
         $this->app->booted(function () {
             $schedule = $this->app->make(Schedule::class);
@@ -57,6 +60,21 @@ class CorpWalletManagerServiceProvider extends AbstractSeatPlugin
                 ->name('corpwallet:monthly-backfill')
                 ->description('Monthly wallet data integrity check and backfill');
         });
+    }
+
+    /**
+     * Add content which must be published.
+     */
+    private function add_publications()
+    {
+        $this->publishes([
+            __DIR__ . '/resources/js' => public_path('corpwalletmanager/js'),
+        ], ['public', 'seat']);
+        
+        // Also publish assets directory if it exists
+        $this->publishes([
+            __DIR__ . '/resources/assets' => public_path('web/corpwalletmanager'),
+        ], ['public', 'seat']);
     }
 
     public function register()
