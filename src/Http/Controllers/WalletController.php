@@ -10,9 +10,11 @@ use Seat\CorpWalletManager\Models\Settings;
 use Seat\CorpWalletManager\Models\Prediction;
 use Seat\CorpWalletManager\Models\MonthlyBalance;
 use Seat\CorpWalletManager\Models\DivisionBalance;
+use Seat\CorpWalletManager\Services\InternalTransferService;
 
 class WalletController extends Controller
 {
+    protected $internalTransferService;
     /**
      * Get corporation ID from request or settings
      */
@@ -710,7 +712,7 @@ class WalletController extends Controller
     }
 
     /**
-     * Get income vs expenses breakdown
+     * Get income vs expenses breakdown - MODIFIED VERSION
      */
     public function incomeExpense(Request $request)
     {
@@ -720,30 +722,62 @@ class WalletController extends Controller
             
             $startDate = Carbon::now()->subMonths($months)->startOfMonth();
             
-            $query = DB::table('corporation_wallet_journals')
-                ->selectRaw('
-                    DATE_FORMAT(date, "%Y-%m") as month,
-                    SUM(CASE WHEN amount > 0 THEN amount ELSE 0 END) as income,
-                    SUM(CASE WHEN amount < 0 THEN ABS(amount) ELSE 0 END) as expenses
-                ')
-                ->where('date', '>=', $startDate)
-                ->groupBy('month')
-                ->orderBy('month');
-                
+            // Check internal transfer settings
+            $excludeInternal = $corporationId ? $this->shouldExcludeInternalTransfers($corporationId) : false;
+            
+            // Get all transactions first
+            $allTransactions = DB::table('corporation_wallet_journals')
+                ->where('date', '>=', $startDate);
+            
             if ($corporationId && is_numeric($corporationId)) {
-                $query->where('corporation_id', $corporationId);
+                $allTransactions->where('corporation_id', $corporationId);
             }
             
-            $results = $query->get();
+            $transactions = $allTransactions->get();
+            
+            // Get internal transfer IDs if excluding
+            $internalIds = [];
+            if ($excludeInternal && $corporationId) {
+                $internalIds = $this->getInternalTransferIds($corporationId, $startDate);
+            }
+            
+            // Group by month and calculate
+            $monthlyData = [];
+            foreach ($transactions as $tx) {
+                $isInternal = in_array($tx->id, $internalIds);
+                
+                // Skip if internal and excluding
+                if ($isInternal && $excludeInternal) {
+                    continue;
+                }
+                
+                $month = Carbon::parse($tx->date)->format('Y-m');
+                
+                if (!isset($monthlyData[$month])) {
+                    $monthlyData[$month] = [
+                        'income' => 0,
+                        'expenses' => 0
+                    ];
+                }
+                
+                if ($tx->amount > 0) {
+                    $monthlyData[$month]['income'] += $tx->amount;
+                } else {
+                    $monthlyData[$month]['expenses'] += abs($tx->amount);
+                }
+            }
+            
+            // Sort by month
+            ksort($monthlyData);
             
             $labels = [];
             $income = [];
             $expenses = [];
             
-            foreach ($results as $row) {
-                $labels[] = Carbon::createFromFormat('Y-m', $row->month)->format('M Y');
-                $income[] = (float)$row->income;
-                $expenses[] = (float)$row->expenses;
+            foreach ($monthlyData as $month => $data) {
+                $labels[] = Carbon::createFromFormat('Y-m', $month)->format('M Y');
+                $income[] = $data['income'];
+                $expenses[] = $data['expenses'];
             }
             
             return response()->json([
@@ -752,6 +786,7 @@ class WalletController extends Controller
                 'expenses' => $expenses,
                 'months_requested' => $months,
                 'corporation_id' => $corporationId,
+                'internal_transfers_excluded' => $excludeInternal
             ]);
             
         } catch (\Exception $e) {
@@ -770,16 +805,26 @@ class WalletController extends Controller
     }
 
     /**
-     * Get transaction breakdown by type (for pie charts)
+     * Get transaction breakdown by type (for pie charts) - MODIFIED VERSION FOR INTERNAL TRANSFERS
      */
     public function transactionBreakdown(Request $request)
     {
         try {
             $corporationId = $this->getCorporationId($request);
             $type = $request->get('type', 'expense'); // 'income' or 'expense'
-            $months = (int)$request->get('months', 1); // Default to current month
+            $months = (int)$request->get('months', 1);
             
             $startDate = Carbon::now()->subMonths($months)->startOfMonth();
+            
+            // Check if we should handle internal transfers
+            $excludeInternal = $this->shouldExcludeInternalTransfers($corporationId);
+            $showSeparately = $this->shouldShowInternalTransfersSeparately($corporationId);
+            
+            // Get internal transfer IDs if needed
+            $internalIds = [];
+            if ($corporationId && ($excludeInternal || $showSeparately)) {
+                $internalIds = $this->getInternalTransferIds($corporationId, $startDate);
+            }
             
             // Build the query
             $query = DB::table('corporation_wallet_journals')
@@ -789,6 +834,11 @@ class WalletController extends Controller
                     COUNT(*) as transaction_count
                 ')
                 ->where('date', '>=', $startDate);
+            
+            // Exclude internal transfers if configured
+            if ($excludeInternal && !empty($internalIds)) {
+                $query->whereNotIn('id', $internalIds);
+            }
             
             // Filter by income or expense
             if ($type === 'income') {
@@ -835,6 +885,39 @@ class WalletController extends Controller
                 }
             }
             
+            // Add internal transfers as separate category if configured
+            if ($showSeparately && !empty($internalIds)) {
+                $internalQuery = DB::table('corporation_wallet_journals')
+                    ->whereIn('id', $internalIds)
+                    ->where('date', '>=', $startDate);
+                
+                if ($type === 'income') {
+                    $internalQuery->where('amount', '>', 0);
+                } else {
+                    $internalQuery->where('amount', '<', 0);
+                }
+                
+                if ($corporationId) {
+                    $internalQuery->where('corporation_id', $corporationId);
+                }
+                
+                $internalStats = $internalQuery->selectRaw('
+                    SUM(ABS(amount)) as total_amount,
+                    COUNT(*) as transaction_count
+                ')->first();
+                
+                if ($internalStats && $internalStats->total_amount > 0) {
+                    $labels[] = 'Internal Transfers';
+                    $values[] = (float)$internalStats->total_amount;
+                    $details[] = [
+                        'label' => 'Internal Transfers',
+                        'value' => (float)$internalStats->total_amount,
+                        'count' => $internalStats->transaction_count,
+                        'ref_type' => 'internal_transfer'
+                    ];
+                }
+            }
+            
             // Add "Other" category if there are grouped items
             if ($other > 0) {
                 $labels[] = 'Other';
@@ -863,6 +946,10 @@ class WalletController extends Controller
                 'period' => [
                     'start' => $startDate->format('Y-m-d'),
                     'end' => Carbon::now()->format('Y-m-d')
+                ],
+                'settings' => [
+                    'exclude_internal' => $excludeInternal,
+                    'show_separately' => $showSeparately
                 ]
             ]);
             
@@ -879,6 +966,115 @@ class WalletController extends Controller
                 'values' => [],
                 'details' => [],
             ], 500);
+        }
+    }
+
+    /**
+     * API endpoint for internal transfer statistics
+     */
+    public function getInternalTransferStats(Request $request)
+    {
+        try {
+            $corporationId = $this->getCorporationId($request);
+            if (!$corporationId) {
+                return response()->json(['error' => 'Corporation ID required'], 400);
+            }
+
+            $days = $request->get('days', 30);
+            $this->initInternalTransferService($corporationId);
+            
+            $startDate = Carbon::now()->subDays($days);
+            $endDate = Carbon::now();
+            
+            // Get statistics
+            $stats = $this->internalTransferService->calculateStatistics($corporationId, $startDate, $endDate);
+            
+            // Get daily data for chart
+            $dailyData = DB::table('corpwalletmanager_internal_transfers as it')
+                ->join('corporation_wallet_journals as j', 'it.journal_id', '=', 'j.id')
+                ->where('it.corporation_id', $corporationId)
+                ->where('it.transaction_date', '>=', $startDate)
+                ->selectRaw('
+                    DATE(it.transaction_date) as date,
+                    SUM(CASE WHEN j.amount > 0 THEN j.amount ELSE 0 END) as internal_in,
+                    SUM(CASE WHEN j.amount < 0 THEN ABS(j.amount) ELSE 0 END) as internal_out,
+                    COUNT(*) as count
+                ')
+                ->groupBy(DB::raw('DATE(it.transaction_date)'))
+                ->orderBy('date')
+                ->get()
+                ->map(function($item) {
+                    return [
+                        'date' => Carbon::parse($item->date)->format('M d'),
+                        'internal_in' => (float) $item->internal_in,
+                        'internal_out' => (float) $item->internal_out,
+                        'count' => (int) $item->count
+                    ];
+                });
+            
+            // Get most active division
+            $mostActiveDiv = DB::table('corporation_wallet_journals as j')
+                ->join('corpwalletmanager_internal_transfers as it', 'j.id', '=', 'it.journal_id')
+                ->join('corporation_divisions as d', function($join) {
+                    $join->on('j.corporation_id', '=', 'd.corporation_id')
+                         ->on('j.division', '=', 'd.division');
+                })
+                ->where('j.corporation_id', $corporationId)
+                ->where('it.transaction_date', '>=', $startDate)
+                ->selectRaw('d.name, COUNT(*) as transfer_count')
+                ->groupBy('d.name')
+                ->orderByDesc('transfer_count')
+                ->first();
+            
+            // Get patterns
+            $patterns = $this->internalTransferService->getTransferPatterns($corporationId, 3);
+            
+            return response()->json([
+                'volume' => $stats['total_volume'] ?? 0,
+                'count' => array_sum(array_column($stats['by_category']->toArray(), 'total_count')),
+                'net' => $stats['net_internal'] ?? 0,
+                'most_active_division' => $mostActiveDiv ? $mostActiveDiv->name : null,
+                'daily_data' => $dailyData,
+                'patterns' => $patterns,
+                'by_category' => $stats['by_category']
+            ]);
+            
+        } catch (\Exception $e) {
+            Log::error('Internal transfer stats error', ['error' => $e->getMessage()]);
+            return response()->json(['error' => 'Unable to fetch internal transfer stats'], 500);
+        }
+    }
+
+    /**
+     * Save internal transfer settings
+     */
+    public function saveInternalTransferSettings(Request $request)
+    {
+        try {
+            $corporationId = $this->getCorporationId($request);
+            if (!$corporationId) {
+                return response()->json(['error' => 'Corporation ID required'], 400);
+            }
+
+            $settings = $request->get('settings');
+            
+            Settings::updateOrCreate(
+                ['corporation_id' => $corporationId],
+                [
+                    'exclude_internal_transfers_charts' => $settings['exclude_internal_transfers_charts'] ?? false,
+                    'show_internal_transfers_separately' => $settings['show_internal_transfers_separately'] ?? false,
+                    'internal_transfer_ref_types' => json_encode($settings['custom_ref_types'] ?? []),
+                ]
+            );
+            
+            // Clear cache
+            \Cache::forget('corp_wallet_settings_' . $corporationId);
+            
+            return response()->json(['success' => true]);
+            
+        } catch (\Exception $e) {
+            Log::error('Save internal transfer settings error', ['error' => $e->getMessage()]);
+            return response()->json(['error' => 'Unable to save settings'], 500);
         }
     }
 
@@ -1774,6 +1970,53 @@ class WalletController extends Controller
     }
     
     // ========== HELPER METHODS ==========
+
+    /**
+     * Initialize internal transfer service
+     */
+    protected function initInternalTransferService($corporationId)
+    {
+        if (!$this->internalTransferService || 
+            (property_exists($this->internalTransferService, 'corporationId') && 
+             $this->internalTransferService->corporationId != $corporationId)) {
+            $this->internalTransferService = new InternalTransferService($corporationId);
+        }
+    }
+
+    /**
+     * Check if internal transfers should be excluded
+     */
+    protected function shouldExcludeInternalTransfers($corporationId)
+    {
+        $settings = Settings::where('corporation_id', $corporationId)->first();
+        return $settings ? ($settings->exclude_internal_transfers_charts ?? false) : false;
+    }
+
+    /**
+     * Check if internal transfers should be shown separately
+     */
+    protected function shouldShowInternalTransfersSeparately($corporationId)
+    {
+        $settings = Settings::where('corporation_id', $corporationId)->first();
+        return $settings ? ($settings->show_internal_transfers_separately ?? false) : false;
+    }
+
+    /**
+     * Get internal transfer IDs for a period
+     */
+    protected function getInternalTransferIds($corporationId, $startDate, $endDate = null)
+    {
+        $query = DB::table('corpwalletmanager_internal_transfers')
+            ->where('corporation_id', $corporationId);
+
+        if ($endDate) {
+            $query->whereBetween('transaction_date', [$startDate, $endDate]);
+        } else {
+            $query->where('transaction_date', '>=', $startDate);
+        }
+
+        return $query->pluck('journal_id')->toArray();
+    }
 
     /**
      * Helper function to get division names from database
