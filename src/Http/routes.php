@@ -153,6 +153,20 @@ Route::group([
     Route::get('/api/analytics/executive-summary', 'AnalyticsController@executiveSummary')
         ->name('corpwalletmanager.analytics.executive-summary')
         ->middleware('can:corpwalletmanager.director_view');
+
+    // Internal Transfer endpoints
+    Route::get('/internal-transfers', 'InternalTransferApiController@getStatistics')
+        ->name('corpwalletmanager.api.internal.stats');
+    
+    Route::get('/internal-transfers/analyze', 'InternalTransferApiController@analyze')
+        ->name('corpwalletmanager.api.internal.analyze');
+    
+    Route::get('/internal-transfers/matrix', 'InternalTransferApiController@getTransferMatrix')
+        ->name('corpwalletmanager.api.internal.matrix');
+    
+    Route::post('/settings/internal-transfers', 'InternalTransferApiController@saveSettings')
+        ->name('corpwalletmanager.api.internal.settings')
+        ->middleware('can:corpwalletmanager.settings');
     
     // Settings routes
     Route::get('/settings', 'SettingsController@index')
