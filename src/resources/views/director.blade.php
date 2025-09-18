@@ -224,15 +224,20 @@
                     <!-- Prediction Chart -->
                     <div class="card mt-3">
                         <div class="card-header">
-                            <h3 class="card-title">30-Day Forecast</h3>
+                            <h3 class="card-title">Balance Forecast</h3>
                             <div class="card-tools">
+                                <div class="btn-group btn-group-sm mr-2">
+                                    <button type="button" class="btn btn-secondary active" onclick="updatePredictionDays(30)">30D</button>
+                                    <button type="button" class="btn btn-outline-secondary" onclick="updatePredictionDays(60)">60D</button>
+                                    <button type="button" class="btn btn-outline-secondary" onclick="updatePredictionDays(90)">90D</button>
+                                </div>
                                 <button type="button" class="btn btn-tool" onclick="refreshData()">
                                     <i class="fas fa-sync-alt"></i> Refresh All
                                 </button>
                             </div>
                         </div>
                         <div class="card-body">
-                            <canvas id="predictionChart" height="150"></canvas>
+                            <canvas id="predictionChart" height="300"></canvas> <!-- Increased height -->
                         </div>
                     </div>
                 </div>
@@ -702,8 +707,13 @@
 @stop
 
 @push('javascript')
-<script src="https://cdn.jsdelivr.net/npm/chart.js@3.9.1/dist/chart.min.js"></script>
+{{-- Load Chart.js from plugin assets to avoid CSP issues --}}
+<script src="{{ asset('corpwalletmanager/js/chart.min.js') }}"></script>
 <script>
+// Verify Chart.js loaded
+if (typeof Chart === 'undefined') {
+    console.error('Chart.js failed to load. Assets may not be published correctly.');
+}
 // Fix SeAT's mixed content issue first
 (function() {
     // Wait for jQuery to be available
@@ -742,6 +752,7 @@ let expenseCategoriesDetailedChart = null;
 let dailyCashflowChart = null;
 let weeklyPatternChart = null;
 let currentChartMode = 'flow';
+let currentPredictionDays = 30;
 let divisionCashflowChart = null;
 let divisionMiniCharts = {};
 let currentDivisionId = null;
@@ -1263,8 +1274,10 @@ function loadExpenseBreakdown() {
 }
 
 // Load prediction chart
-function loadPredictionChart() {
-    fetch(buildUrl(addCorpParam('/corp-wallet-manager/api/predictions?days=30')))
+function loadPredictionChart(days = null) {
+    const requestDays = days || currentPredictionDays || 30;
+    
+    fetch(buildUrl(addCorpParam(`/corp-wallet-manager/api/predictions?days=${requestDays}`)))
         .then(response => response.json())
         .then(data => {
             // Destroy existing chart
@@ -1276,8 +1289,8 @@ function loadPredictionChart() {
             const canvas = document.getElementById('predictionChart');
             const ctx = canvas.getContext('2d');
 
-            // Explicit height control
-            canvas.parentNode.style.height = '150px';
+            // Increased height for better visibility
+            canvas.parentNode.style.height = '400px'; // Increased from 300px
             canvas.parentNode.style.width = '100%';
 
             if (!data.data || data.data.length === 0) {
@@ -1287,35 +1300,170 @@ function loadPredictionChart() {
                 return;
             }
 
+            // Prepare datasets for chart
+            const datasets = [
+                {
+                    label: 'Predicted Balance',
+                    data: data.data || data.predictions || [],
+                    borderColor: config.colorPredicted,
+                    backgroundColor: 'transparent',
+                    borderWidth: 3,
+                    tension: 0.4,
+                    pointRadius: requestDays > 30 ? 1 : 2, // Smaller points for longer ranges
+                    pointHoverRadius: 6
+                }
+            ];
+
+            // Add confidence bands if available
+            if (data.confidence_bands) {
+                // Color intensity based on range
+                const alphaMultiplier = requestDays > 60 ? '20' : requestDays > 30 ? '30' : '40';
+                
+                datasets.push({
+                    label: '68% Confidence Range',
+                    data: data.confidence_bands.upper_68,
+                    borderColor: config.colorPredicted + alphaMultiplier,
+                    backgroundColor: 'transparent',
+                    borderDash: [5, 5],
+                    borderWidth: 1,
+                    pointRadius: 0,
+                    fill: '+1'
+                });
+                
+                datasets.push({
+                    label: '68% Lower Bound',
+                    data: data.confidence_bands.lower_68,
+                    borderColor: config.colorPredicted + alphaMultiplier,
+                    backgroundColor: config.colorPredicted + '20',
+                    borderDash: [5, 5],
+                    borderWidth: 1,
+                    pointRadius: 0,
+                    fill: '-1'
+                });
+                
+                // Add 95% confidence for 30-day view only (less clutter)
+                if (requestDays <= 30 && data.confidence_bands.upper_95 && data.confidence_bands.upper_95.length > 0) {
+                    datasets.push({
+                        label: '95% Confidence Range',
+                        data: data.confidence_bands.upper_95,
+                        borderColor: 'transparent',
+                        backgroundColor: config.colorPredicted + '10',
+                        borderWidth: 0,
+                        pointRadius: 0,
+                        fill: '+1'
+                    });
+                    
+                    datasets.push({
+                        label: '95% Lower Bound',
+                        data: data.confidence_bands.lower_95,
+                        borderColor: 'transparent',
+                        backgroundColor: 'transparent',
+                        borderWidth: 0,
+                        pointRadius: 0,
+                        fill: false
+                    });
+                }
+            }
+
+            // Determine confidence text based on range
+            let confidenceText = '';
+            if (requestDays <= 30) {
+                confidenceText = 'High confidence (based on 12-month weighted analysis)';
+            } else if (requestDays <= 60) {
+                confidenceText = 'Medium confidence (extended forecast)';
+            } else {
+                confidenceText = 'Low confidence (long-range forecast)';
+            }
+
             predictionChart = new Chart(ctx, {
                 type: 'line',
                 data: {
                     labels: data.labels || [],
-                    datasets: [{
-                        label: 'Predicted Balance',
-                        data: data.data || [],
-                        borderColor: config.colorPredicted,
-                        backgroundColor: config.colorPredicted + '20',
-                        borderDash: [5, 5],
-                        tension: 0.4,
-                        fill: true
-                    }]
+                    datasets: datasets
                 },
                 options: {
                     responsive: true,
                     maintainAspectRatio: false,
+                    interaction: {
+                        mode: 'index',
+                        intersect: false,
+                    },
                     plugins: {
-                        legend: { display: false },
+                        legend: { 
+                            display: true,
+                            position: 'top',
+                            labels: {
+                                filter: function(item) {
+                                    // Only show main prediction in legend
+                                    return item.text === 'Predicted Balance';
+                                },
+                                font: {
+                                    size: 12
+                                }
+                            }
+                        },
                         tooltip: {
                             callbacks: {
                                 label: function(context) {
-                                    return 'Predicted: ' + formatISK(context.parsed.y);
+                                    if (context.dataset.label === 'Predicted Balance') {
+                                        const confidence = data.confidence_values ? data.confidence_values[context.dataIndex] : null;
+                                        let label = 'Predicted: ' + formatISK(context.parsed.y);
+                                        if (confidence) {
+                                            label += ` (${confidence}% confidence)`;
+                                        }
+                                        return label;
+                                    }
+                                    return context.dataset.label + ': ' + formatISK(context.parsed.y);
+                                },
+                                afterBody: function(tooltipItems) {
+                                    const index = tooltipItems[0].dataIndex;
+                                    const factors = data.factors ? data.factors[index] : null;
+                                    
+                                    if (factors && requestDays <= 30) { // Only show factors for 30-day view
+                                        let details = [];
+                                        if (factors.seasonal) details.push(`Seasonal: ${(factors.seasonal * 100).toFixed(0)}%`);
+                                        if (factors.momentum) details.push(`Momentum: ${(factors.momentum * 100).toFixed(0)}%`);
+                                        if (factors.activity) details.push(`Activity: ${(factors.activity * 100).toFixed(0)}%`);
+                                        return details;
+                                    }
+                                    return [];
                                 }
                             }
+                        },
+                        title: {
+                            display: true,
+                            text: `${requestDays}-Day Balance Forecast with Confidence Intervals`,
+                            font: {
+                                size: 14
+                            }
+                        },
+                        subtitle: {
+                            display: true,
+                            text: confidenceText,
+                            font: {
+                                size: 11,
+                                style: 'italic'
+                            },
+                            color: '#666'
                         }
                     },
                     scales: {
+                        x: {
+                            title: {
+                                display: true,
+                                text: 'Date'
+                            },
+                            ticks: {
+                                maxRotation: 45,
+                                minRotation: 45,
+                                maxTicksLimit: requestDays > 60 ? 15 : requestDays > 30 ? 10 : 8
+                            }
+                        },
                         y: {
+                            title: {
+                                display: true,
+                                text: 'Balance (ISK)'
+                            },
                             ticks: {
                                 callback: function(value) {
                                     return formatAxisValue(value);
@@ -1342,6 +1490,27 @@ function updateBalanceChart(mode) {
     event.target.classList.add('btn-secondary', 'active');
     loadBalanceChart(mode);
 }
+
+// Update prediction chart time range
+function updatePredictionDays(days) {
+    currentPredictionDays = days;
+    
+    // Update button states
+    document.querySelectorAll('.card-tools .btn-group .btn').forEach(btn => {
+        if (btn.textContent.includes('D') && btn.onclick && btn.onclick.toString().includes('updatePredictionDays')) {
+            btn.classList.remove('btn-secondary', 'active');
+            btn.classList.add('btn-outline-secondary');
+        }
+    });
+    
+    // Activate the clicked button
+    event.target.classList.remove('btn-outline-secondary');
+    event.target.classList.add('btn-secondary', 'active');
+    
+    // Reload the prediction chart with new range
+    loadPredictionChart(days);
+}
+
 // Analytics Tab Functions
 function loadAnalyticsData() {
     calculateHealthScore();
@@ -2627,7 +2796,7 @@ function refreshData() {
     loadDivisionBreakdown();
     loadBalanceChart(currentChartMode);
     loadIncomeExpenseChart();
-    loadPredictionChart();
+    loadPredictionChart(currentPredictionDays);
     loadIncomeBreakdown();
     loadExpenseBreakdown();
 
