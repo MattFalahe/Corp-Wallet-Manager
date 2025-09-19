@@ -13,6 +13,7 @@ use Seat\CorpWalletManager\Models\MonthlyBalance;
 use Seat\CorpWalletManager\Models\DivisionBalance;
 use Seat\CorpWalletManager\Models\RecalcLog;
 use Seat\CorpWalletManager\Models\Settings;
+use Seat\CorpWalletManager\Services\InternalTransferService; 
 
 class UpdateHourlyWalletData implements ShouldQueue
 {
@@ -38,6 +39,23 @@ class UpdateHourlyWalletData implements ShouldQueue
             // Update data for the last 24 hours only (efficient)
             $since = Carbon::now()->subHours(24);
             $currentMonth = Carbon::now()->format('Y-m');
+            
+            // === ADD INTERNAL TRANSFER DETECTION HERE ===
+            // Process internal transfers for recent transactions
+            if ($corporationId) {
+                $this->detectInternalTransfers($corporationId, $since);
+            } else {
+                // Process for all corporations
+                $corporations = DB::table('corporation_wallet_journals')
+                    ->where('date', '>=', $since)
+                    ->distinct('corporation_id')
+                    ->pluck('corporation_id');
+                    
+                foreach ($corporations as $corpId) {
+                    $this->detectInternalTransfers($corpId, $since);
+                }
+            }
+            // === END INTERNAL TRANSFER DETECTION ===
             
             // Update monthly balances for current month
             $query = DB::table('corporation_wallet_journals')
@@ -134,6 +152,52 @@ class UpdateHourlyWalletData implements ShouldQueue
             ]);
             
             throw $e;
+        }
+    }
+    
+    /**
+     * Detect and mark internal transfers for recent transactions
+     */
+    private function detectInternalTransfers($corporationId, $since)
+    {
+        try {
+            $service = new InternalTransferService($corporationId);
+            
+            // Get recent transactions that haven't been checked yet
+            $transactions = DB::table('corporation_wallet_journals as j')
+                ->leftJoin('corpwalletmanager_journal_metadata as m', 'j.id', '=', 'm.journal_id')
+                ->where('j.corporation_id', $corporationId)
+                ->where('j.date', '>=', $since)
+                ->whereNull('m.journal_id') // Only unprocessed transactions
+                ->select('j.*')
+                ->get();
+            
+            $detectedCount = 0;
+            
+            foreach ($transactions as $transaction) {
+                if ($service->isInternalTransfer($transaction)) {
+                    $detectedCount++;
+                    // The service automatically marks it as internal
+                }
+            }
+            
+            if ($detectedCount > 0) {
+                Log::info('Internal transfers detected', [
+                    'corporation_id' => $corporationId,
+                    'detected_count' => $detectedCount,
+                    'total_checked' => $transactions->count()
+                ]);
+                
+                // Clear cache for this corporation
+                \Cache::tags(['corp_wallet_' . $corporationId])->flush();
+            }
+            
+        } catch (\Exception $e) {
+            Log::warning('Failed to detect internal transfers in hourly update', [
+                'corporation_id' => $corporationId,
+                'error' => $e->getMessage()
+            ]);
+            // Don't throw - let the rest of the job continue
         }
     }
 }
