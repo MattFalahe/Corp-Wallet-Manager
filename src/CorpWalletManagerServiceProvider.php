@@ -92,6 +92,7 @@ class CorpWalletManagerServiceProvider extends AbstractSeatPlugin
         $this->commands([
             \Seat\CorpWalletManager\Console\Commands\BackfillWalletDataCommand::class,
             \Seat\CorpWalletManager\Console\Commands\SetupPermissionsCommand::class,
+            \Seat\CorpWalletManager\Console\Commands\BackfillInternalTransfers::class,
         ]);
     }
 
