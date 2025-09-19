@@ -167,6 +167,14 @@ Route::group([
     Route::post('/settings/internal-transfers', 'InternalTransferApiController@saveSettings')
         ->name('corpwalletmanager.api.internal.settings')
         ->middleware('can:corpwalletmanager.settings');
+
+    Route::get('/api/internal-transfers', [
+        'as' => 'corpwalletmanager.api.internal.stats',
+        'uses' => 'WalletController@getInternalTransferStats'
+    
+    Route::post('/api/internal-transfers/settings', [
+        'as' => 'corpwalletmanager.api.internal.settings',
+        'uses' => 'WalletController@saveInternalTransferSettings'
     
     // Settings routes
     Route::get('/settings', 'SettingsController@index')
