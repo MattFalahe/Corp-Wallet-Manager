@@ -2008,13 +2008,13 @@ class WalletController extends Controller
     {
         $query = DB::table('corpwalletmanager_internal_transfers')
             ->where('corporation_id', $corporationId);
-
+            
         if ($endDate) {
             $query->whereBetween('transaction_date', [$startDate, $endDate]);
         } else {
             $query->where('transaction_date', '>=', $startDate);
         }
-
+        
         return $query->pluck('journal_id')->toArray();
     }
 
