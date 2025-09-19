@@ -1,6 +1,6 @@
 <?php
 
-namespace MattFalahe\CorpWalletManager\Console\Commands;
+namespace Seat\CorpWalletManager\Console\Commands;
 
 use Illuminate\Console\Command;
 use MattFalahe\CorpWalletManager\Services\InternalTransferService;
