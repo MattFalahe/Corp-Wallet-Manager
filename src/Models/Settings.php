@@ -10,7 +10,10 @@ class Settings extends Model
     
     protected $fillable = [
         'key',
-        'value'
+        'value',
+        'exclude_internal_transfers_charts',
+        'show_internal_transfers_separately', 
+        'internal_transfer_ref_types',
     ];
     
     /**
