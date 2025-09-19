@@ -11,6 +11,7 @@ use Illuminate\Support\Facades\Log;
 use Carbon\Carbon;
 use Seat\CorpWalletManager\Models\RecalcLog;
 use Seat\CorpWalletManager\Models\Settings;
+use Seat\CorpWalletManager\Services\InternalTransferService; 
 
 class DailyAggregation implements ShouldQueue
 {
@@ -32,7 +33,7 @@ class DailyAggregation implements ShouldQueue
 
             $corporationId = Settings::getSetting('selected_corporation_id');
             
-            // Create daily summary table if it doesn't exist
+            // Create daily summary table if it doesn't exist (INCLUDING INTERNAL TRANSFER COLUMNS)
             DB::statement('
                 CREATE TABLE IF NOT EXISTS corpwalletmanager_daily_summaries (
                     id BIGINT AUTO_INCREMENT PRIMARY KEY,
@@ -42,6 +43,11 @@ class DailyAggregation implements ShouldQueue
                     closing_balance DECIMAL(20,2),
                     total_income DECIMAL(20,2),
                     total_expenses DECIMAL(20,2),
+                    internal_transfers_in DECIMAL(20,2) DEFAULT 0,
+                    internal_transfers_out DECIMAL(20,2) DEFAULT 0,
+                    internal_transfer_count INT DEFAULT 0,
+                    real_income DECIMAL(20,2) DEFAULT 0,
+                    real_expenses DECIMAL(20,2) DEFAULT 0,
                     net_flow DECIMAL(20,2),
                     transaction_count INT,
                     top_income_type VARCHAR(255),
@@ -56,6 +62,9 @@ class DailyAggregation implements ShouldQueue
             
             // Aggregate yesterday's data
             $yesterday = Carbon::yesterday();
+            
+            // First, detect internal transfers for yesterday if not already done
+            $this->detectInternalTransfersForDate($corporationId, $yesterday);
             
             $query = DB::table('corporation_wallet_journals')
                 ->whereDate('date', $yesterday)
@@ -77,22 +86,38 @@ class DailyAggregation implements ShouldQueue
             $processed = 0;
             
             foreach ($results as $row) {
-                // Get top transaction types for the day
-                $topIncome = DB::table('corporation_wallet_journals')
-                    ->where('corporation_id', $row->corporation_id)
-                    ->whereDate('date', $yesterday)
-                    ->where('amount', '>', 0)
-                    ->selectRaw('ref_type, SUM(amount) as total')
-                    ->groupBy('ref_type')
+                // Calculate internal transfer statistics
+                $internalStats = $this->calculateInternalTransferStats(
+                    $row->corporation_id, 
+                    $yesterday
+                );
+                
+                // Get top transaction types for the day (excluding internal transfers)
+                $topIncome = DB::table('corporation_wallet_journals as j')
+                    ->leftJoin('corpwalletmanager_journal_metadata as m', 'j.id', '=', 'm.journal_id')
+                    ->where('j.corporation_id', $row->corporation_id)
+                    ->whereDate('j.date', $yesterday)
+                    ->where('j.amount', '>', 0)
+                    ->where(function($q) {
+                        $q->whereNull('m.is_internal_transfer')
+                          ->orWhere('m.is_internal_transfer', false);
+                    })
+                    ->selectRaw('j.ref_type, SUM(j.amount) as total')
+                    ->groupBy('j.ref_type')
                     ->orderBy('total', 'desc')
                     ->first();
                 
-                $topExpense = DB::table('corporation_wallet_journals')
-                    ->where('corporation_id', $row->corporation_id)
-                    ->whereDate('date', $yesterday)
-                    ->where('amount', '<', 0)
-                    ->selectRaw('ref_type, SUM(ABS(amount)) as total')
-                    ->groupBy('ref_type')
+                $topExpense = DB::table('corporation_wallet_journals as j')
+                    ->leftJoin('corpwalletmanager_journal_metadata as m', 'j.id', '=', 'm.journal_id')
+                    ->where('j.corporation_id', $row->corporation_id)
+                    ->whereDate('j.date', $yesterday)
+                    ->where('j.amount', '<', 0)
+                    ->where(function($q) {
+                        $q->whereNull('m.is_internal_transfer')
+                          ->orWhere('m.is_internal_transfer', false);
+                    })
+                    ->selectRaw('j.ref_type, SUM(ABS(j.amount)) as total')
+                    ->groupBy('j.ref_type')
                     ->orderBy('total', 'desc')
                     ->first();
                 
@@ -102,6 +127,10 @@ class DailyAggregation implements ShouldQueue
                     ->sum('balance') - $row->net_flow;
                 
                 $closingBalance = $openingBalance + $row->net_flow;
+                
+                // Calculate real income/expenses (excluding internal transfers)
+                $realIncome = $row->income - $internalStats['internal_in'];
+                $realExpenses = $row->expenses - $internalStats['internal_out'];
                 
                 // Insert or update daily summary
                 DB::table('corpwalletmanager_daily_summaries')
@@ -115,6 +144,11 @@ class DailyAggregation implements ShouldQueue
                             'closing_balance' => $closingBalance,
                             'total_income' => $row->income,
                             'total_expenses' => $row->expenses,
+                            'internal_transfers_in' => $internalStats['internal_in'],
+                            'internal_transfers_out' => $internalStats['internal_out'],
+                            'internal_transfer_count' => $internalStats['count'],
+                            'real_income' => $realIncome,
+                            'real_expenses' => $realExpenses,
                             'net_flow' => $row->net_flow,
                             'transaction_count' => $row->transaction_count,
                             'top_income_type' => $topIncome ? $topIncome->ref_type : null,
@@ -157,5 +191,70 @@ class DailyAggregation implements ShouldQueue
             
             throw $e;
         }
+    }
+    
+    /**
+     * Detect internal transfers for a specific date
+     */
+    private function detectInternalTransfersForDate($corporationId, $date)
+    {
+        try {
+            if ($corporationId) {
+                $corps = [$corporationId];
+            } else {
+                // Get all corporations with transactions on this date
+                $corps = DB::table('corporation_wallet_journals')
+                    ->whereDate('date', $date)
+                    ->distinct('corporation_id')
+                    ->pluck('corporation_id');
+            }
+            
+            foreach ($corps as $corpId) {
+                $service = new InternalTransferService($corpId);
+                
+                // Get transactions for this date that haven't been checked
+                $transactions = DB::table('corporation_wallet_journals as j')
+                    ->leftJoin('corpwalletmanager_journal_metadata as m', 'j.id', '=', 'm.journal_id')
+                    ->where('j.corporation_id', $corpId)
+                    ->whereDate('j.date', $date)
+                    ->whereNull('m.journal_id') // Only unprocessed
+                    ->select('j.*')
+                    ->get();
+                
+                foreach ($transactions as $transaction) {
+                    $service->isInternalTransfer($transaction);
+                    // The service automatically marks it if it's internal
+                }
+            }
+        } catch (\Exception $e) {
+            Log::warning('Failed to detect internal transfers in daily aggregation', [
+                'date' => $date->format('Y-m-d'),
+                'error' => $e->getMessage()
+            ]);
+        }
+    }
+    
+    /**
+     * Calculate internal transfer statistics for a date
+     */
+    private function calculateInternalTransferStats($corporationId, $date)
+    {
+        $stats = DB::table('corporation_wallet_journals as j')
+            ->join('corpwalletmanager_journal_metadata as m', 'j.id', '=', 'm.journal_id')
+            ->where('j.corporation_id', $corporationId)
+            ->whereDate('j.date', $date)
+            ->where('m.is_internal_transfer', true)
+            ->selectRaw('
+                SUM(CASE WHEN j.amount > 0 THEN j.amount ELSE 0 END) as internal_in,
+                SUM(CASE WHEN j.amount < 0 THEN ABS(j.amount) ELSE 0 END) as internal_out,
+                COUNT(*) as count
+            ')
+            ->first();
+        
+        return [
+            'internal_in' => $stats->internal_in ?? 0,
+            'internal_out' => $stats->internal_out ?? 0,
+            'count' => $stats->count ?? 0
+        ];
     }
 }
