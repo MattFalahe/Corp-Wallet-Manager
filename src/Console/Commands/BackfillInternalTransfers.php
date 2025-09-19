@@ -135,75 +135,48 @@ class BackfillInternalTransfers extends Command
         $processed = 0;
         $internal = 0;
         $byType = [];
-        $examples = [];
-
+    
         $this->output->write('  ⏳ Scanning transactions');
-
+    
         do {
-            $transactions = DB::table('corporation_wallet_journals')
-                ->where('corporation_id', $corporationId)
-                ->where('date', '>=', $startDate)
+            $transactions = DB::table('corporation_wallet_journals as j')
+                ->leftJoin('corpwalletmanager_journal_metadata as m', 'j.id', '=', 'm.journal_id')
+                ->where('j.corporation_id', $corporationId)
+                ->where('j.date', '>=', $startDate)
                 ->where(function($query) {
-                    $query->whereNull('is_internal_transfer')
-                          ->orWhere('is_internal_transfer', false);
+                    $query->whereNull('m.is_internal_transfer')
+                          ->orWhere('m.is_internal_transfer', false);
                 })
+                ->select('j.*')
                 ->limit($batchSize)
                 ->get();
-
+    
             if ($transactions->isEmpty()) {
                 break;
             }
-
+    
             foreach ($transactions as $transaction) {
                 if ($this->transferService->isInternalTransfer($transaction)) {
                     $category = $this->transferService->categorizeInternalTransfer($transaction);
                     $internal++;
                     $byType[$category] = ($byType[$category] ?? 0) + 1;
-
-                    // Collect examples for display
-                    if (count($examples) < 5) {
-                        $examples[] = [
-                            'date' => Carbon::parse($transaction->date)->format('Y-m-d H:i'),
-                            'amount' => number_format(abs($transaction->amount), 2),
-                            'ref_type' => $transaction->ref_type,
-                            'category' => $category
-                        ];
-                    }
-
-                    if (!$dryRun) {
-                        DB::table('corporation_wallet_journals')
-                            ->where('id', $transaction->id)
-                            ->update([
-                                'is_internal_transfer' => true,
-                                'internal_transfer_category' => $category
-                            ]);
-                    }
                 }
             }
-
+    
             $processed += $transactions->count();
             $this->output->write('.');
-
+    
         } while ($transactions->count() == $batchSize);
-
+    
         $this->output->writeln(" ✓");
-
-        // Display examples if found
-        if (!empty($examples) && $this->output->isVerbose()) {
-            $this->info("\n  📝 Sample Internal Transfers Detected:");
-            $this->table(
-                ['Date', 'Amount', 'Ref Type', 'Category'],
-                $examples
-            );
-        }
-
+    
         return [
             'processed' => $processed,
             'internal' => $internal,
             'by_type' => $byType
         ];
     }
-
+    
     /**
      * Analyze transfer patterns
      */
