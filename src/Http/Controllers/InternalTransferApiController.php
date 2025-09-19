@@ -1,6 +1,6 @@
 <?php
 
-namespace Seat\CorpWalletManager\Http\Controllers\Api;
+namespace Seat\CorpWalletManager\Http\Controllers;
 
 use Illuminate\Http\Request;
 use Illuminate\Routing\Controller;
