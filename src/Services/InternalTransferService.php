@@ -1,6 +1,6 @@
 <?php
 
-namespace MattFalahe\CorpWalletManager\Services;
+namespace Seat\CorpWalletManager\Services;
 
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
@@ -11,7 +11,6 @@ class InternalTransferService
 {
     /**
      * EVE Online ref_types that typically indicate internal transfers
-     * These need to be verified against actual EVE API data
      */
     private const INTERNAL_TRANSFER_REF_TYPES = [
         'corporation_account_withdrawal',
@@ -19,14 +18,13 @@ class InternalTransferService
         'secure_container_transfer',
         'corporate_reward_payout',
         'project_discovery_reward',
-        // Add more as identified from actual data
     ];
 
     /**
      * Ref_types that are definitely internal division transfers
      */
     private const DIVISION_TRANSFER_REF_TYPES = [
-        'corporation_account_withdrawal',  // Division to division transfer
+        'corporation_account_withdrawal',
     ];
 
     protected $corporationId;
@@ -53,69 +51,93 @@ class InternalTransferService
     }
 
     /**
-     * Check if a journal entry is already marked as internal transfer
-     */
-    public function isMarkedAsInternal($journalId)
-    {
-        return DB::table('corpwalletmanager_internal_transfers')
-            ->where('journal_id', $journalId)
-            ->exists();
-    }
-
-    /**
      * Detect if a transaction is an internal transfer
      */
     public function isInternalTransfer($transaction)
     {
-        // Check if already marked
-        if ($this->isMarkedAsInternal($transaction->id)) {
+        // Check our metadata table first
+        $metadata = DB::table('corpwalletmanager_journal_metadata')
+            ->where('journal_id', $transaction->id)
+            ->first();
+        
+        if ($metadata && $metadata->is_internal_transfer) {
+            return true;
+        }
+    
+        // Detection logic for division transfers
+        if ($this->isDivisionTransfer($transaction)) {
+            return true;
+        }
+    
+        // Check for known ref_types
+        if ($this->detectByRefType($transaction)) {
             return true;
         }
 
-        // Check if it's a known internal transfer ref_type
+        // Check for description patterns
+        if ($this->detectByDescription($transaction)) {
+            return true;
+        }
+    
+        return false;
+    }
+    
+    /**
+     * Check if transaction is a division transfer
+     */
+    private function isDivisionTransfer($transaction)
+    {
+        // Division transfers have specific ref_types
+        if (!in_array($transaction->ref_type, self::DIVISION_TRANSFER_REF_TYPES)) {
+            return false;
+        }
+    
+        // Look for matching opposite transaction within 1 minute
+        $opposite = DB::table('corporation_wallet_journals')
+            ->where('corporation_id', $transaction->corporation_id)
+            ->where('id', '!=', $transaction->id)
+            ->whereRaw('ABS(amount) = ?', [abs($transaction->amount)])
+            ->where('amount', $transaction->amount > 0 ? '<' : '>', 0)
+            ->whereBetween('date', [
+                Carbon::parse($transaction->date)->subMinute(),
+                Carbon::parse($transaction->date)->addMinute()
+            ])
+            ->first();
+    
+        if ($opposite) {
+            // Mark both as internal
+            $this->markAsInternal($transaction, 'division_transfer', $opposite->id);
+            $this->markAsInternal($opposite, 'division_transfer', $transaction->id);
+            return true;
+        }
+    
+        return false;
+    }
+
+    /**
+     * Detect by ref_type patterns
+     */
+    private function detectByRefType($transaction)
+    {
         $allRefTypes = array_merge(
             self::INTERNAL_TRANSFER_REF_TYPES,
             $this->customRefTypes
         );
 
         if (in_array($transaction->ref_type, $allRefTypes)) {
-            // Additional validation: check if first and second party are the same (corporation)
-            if ($transaction->first_party_id == $transaction->second_party_id) {
+            // Additional validation for some types
+            if ($transaction->ref_type === 'corporation_dividend_payment') {
+                $this->markAsInternal($transaction, 'dividend');
+                return true;
+            }
+            
+            if ($transaction->ref_type === 'corporate_reward_payout') {
+                $this->markAsInternal($transaction, 'reward');
                 return true;
             }
 
-            // For division transfers, check if it's the same corporation but different divisions
-            if (in_array($transaction->ref_type, self::DIVISION_TRANSFER_REF_TYPES)) {
-                return $this->isSameCorporationTransfer($transaction);
-            }
-        }
-
-        // Pattern matching for description-based detection
-        return $this->detectByDescription($transaction);
-    }
-
-    /**
-     * Check if transaction is between divisions of the same corporation
-     */
-    private function isSameCorporationTransfer($transaction)
-    {
-        // In EVE, division transfers within same corp have specific patterns
-        // Check by wallet keys (Master Wallet = 1000, divisions = 1001-1006)
-        if (isset($transaction->division)) {
-            // Look for a matching opposite transaction
-            $opposite = DB::table('corporation_wallet_journals')
-                ->where('corporation_id', $transaction->corporation_id)
-                ->where('id', '!=', $transaction->id)
-                ->whereRaw('ABS(amount) = ?', [abs($transaction->amount)])
-                ->whereRaw('amount * ? < 0', [$transaction->amount]) // Opposite sign
-                ->whereBetween('date', [
-                    Carbon::parse($transaction->date)->subSeconds(60),
-                    Carbon::parse($transaction->date)->addSeconds(60)
-                ])
-                ->where('ref_type', $transaction->ref_type)
-                ->first();
-
-            return $opposite !== null;
+            $this->markAsInternal($transaction, 'other_internal');
+            return true;
         }
 
         return false;
@@ -139,11 +161,48 @@ class InternalTransferService
 
         foreach ($patterns as $pattern) {
             if (preg_match($pattern, $transaction->reason)) {
+                $this->markAsInternal($transaction, 'description_match');
                 return true;
             }
         }
 
         return false;
+    }
+    
+    /**
+     * Mark a transaction as internal
+     */
+    private function markAsInternal($transaction, $category, $matchedId = null)
+    {
+        // Update metadata table
+        DB::table('corpwalletmanager_journal_metadata')->updateOrInsert(
+            ['journal_id' => $transaction->id],
+            [
+                'corporation_id' => $transaction->corporation_id,
+                'is_internal_transfer' => true,
+                'internal_transfer_category' => $category,
+                'matched_transfer_id' => $matchedId,
+                'created_at' => now(),
+                'updated_at' => now()
+            ]
+        );
+        
+        // Update tracking table
+        DB::table('corpwalletmanager_internal_transfers')->updateOrInsert(
+            ['journal_id' => $transaction->id],
+            [
+                'corporation_id' => $transaction->corporation_id,
+                'ref_type' => $transaction->ref_type,
+                'category' => $category,
+                'amount' => $transaction->amount,
+                'division' => $transaction->division ?? null,
+                'matched_journal_id' => $matchedId,
+                'is_reconciled' => $matchedId !== null,
+                'transaction_date' => $transaction->date,
+                'created_at' => now(),
+                'updated_at' => now()
+            ]
+        );
     }
 
     /**
@@ -151,8 +210,13 @@ class InternalTransferService
      */
     public function categorizeInternalTransfer($transaction)
     {
-        if (!$this->isInternalTransfer($transaction)) {
-            return null;
+        // Check metadata first
+        $metadata = DB::table('corpwalletmanager_journal_metadata')
+            ->where('journal_id', $transaction->id)
+            ->first();
+        
+        if ($metadata && $metadata->internal_transfer_category) {
+            return $metadata->internal_transfer_category;
         }
 
         // Categorize based on ref_type
@@ -168,80 +232,7 @@ class InternalTransferService
             return 'reward';
         }
 
-        // Default category
         return 'other_internal';
-    }
-
-    /**
-     * Mark a transaction as internal transfer in our plugin table
-     */
-    public function markAsInternalTransfer($transaction, $category = null)
-    {
-        if (!$category) {
-            $category = $this->categorizeInternalTransfer($transaction);
-        }
-
-        // Check if already exists
-        $existing = DB::table('corpwalletmanager_internal_transfers')
-            ->where('journal_id', $transaction->id)
-            ->first();
-
-        if ($existing) {
-            return $existing;
-        }
-
-        // Find matching transfer for reconciliation
-        $matchedId = null;
-        $matching = $this->findMatchingTransfer($transaction);
-        if ($matching) {
-            $matchedId = $matching->id;
-        }
-
-        // Insert into our tracking table
-        $id = DB::table('corpwalletmanager_internal_transfers')->insertGetId([
-            'corporation_id' => $transaction->corporation_id,
-            'journal_id' => $transaction->id,
-            'ref_type' => $transaction->ref_type,
-            'category' => $category,
-            'amount' => $transaction->amount,
-            'division' => $transaction->division ?? null,
-            'to_division' => $matching->division ?? null,
-            'matched_journal_id' => $matchedId,
-            'is_reconciled' => $matchedId !== null,
-            'transaction_date' => $transaction->date,
-            'created_at' => Carbon::now(),
-            'updated_at' => Carbon::now()
-        ]);
-
-        // Update pattern matching statistics
-        $this->updatePatternStatistics($transaction->ref_type, $transaction->corporation_id);
-
-        return $id;
-    }
-
-    /**
-     * Process and mark internal transfers in a batch of transactions
-     */
-    public function processTransactionBatch($transactions)
-    {
-        $stats = [
-            'total' => count($transactions),
-            'internal' => 0,
-            'by_category' => []
-        ];
-
-        foreach ($transactions as $transaction) {
-            if ($this->isInternalTransfer($transaction)) {
-                $category = $this->categorizeInternalTransfer($transaction);
-                $this->markAsInternalTransfer($transaction, $category);
-                
-                $stats['internal']++;
-                $stats['by_category'][$category] = ($stats['by_category'][$category] ?? 0) + 1;
-            }
-        }
-
-        Log::info('Internal transfer processing completed', $stats);
-        return $stats;
     }
 
     /**
@@ -249,10 +240,6 @@ class InternalTransferService
      */
     public function findMatchingTransfer($transaction, $timeWindow = 60)
     {
-        if (!$this->isInternalTransfer($transaction)) {
-            return null;
-        }
-
         $searchTime = Carbon::parse($transaction->date);
         $amount = abs($transaction->amount);
 
@@ -261,15 +248,22 @@ class InternalTransferService
             ->where('corporation_id', $transaction->corporation_id)
             ->where('id', '!=', $transaction->id)
             ->whereRaw('ABS(amount) = ?', [$amount])
-            ->whereRaw('amount * ? < 0', [$transaction->amount]) // Opposite sign
+            ->where('amount', $transaction->amount > 0 ? '<' : '>', 0)
             ->whereBetween('date', [
                 $searchTime->copy()->subSeconds($timeWindow),
                 $searchTime->copy()->addSeconds($timeWindow)
             ])
-            ->where('ref_type', $transaction->ref_type)
             ->first();
 
         return $matching;
+    }
+
+    /**
+     * Find matching transfers (for finding pairs)
+     */
+    public function findMatchingTransfers($transaction, $timeWindow = 60)
+    {
+        return $this->findMatchingTransfer($transaction, $timeWindow);
     }
 
     /**
@@ -293,7 +287,7 @@ class InternalTransferService
         return [
             'by_category' => $stats,
             'total_volume' => $stats->sum('total_in') + $stats->sum('total_out'),
-            'net_internal' => $stats->sum('total_in') - $stats->sum('total_out'), // Should be ~0
+            'net_internal' => $stats->sum('total_in') - $stats->sum('total_out'),
             'categories' => $stats->pluck('category')->unique()->values()
         ];
     }
@@ -305,11 +299,12 @@ class InternalTransferService
     {
         $startDate = Carbon::now()->subMonths($months);
 
-        // Join with our tracking table to get internal transfers
+        // Get patterns from metadata table
         $patterns = DB::table('corporation_wallet_journals as j')
-            ->join('corpwalletmanager_internal_transfers as it', 'j.id', '=', 'it.journal_id')
-            ->where('it.corporation_id', $corporationId)
-            ->where('it.transaction_date', '>=', $startDate)
+            ->join('corpwalletmanager_journal_metadata as m', 'j.id', '=', 'm.journal_id')
+            ->where('m.corporation_id', $corporationId)
+            ->where('m.is_internal_transfer', true)
+            ->where('j.date', '>=', $startDate)
             ->selectRaw('
                 DAYOFWEEK(j.date) as day_of_week,
                 DAY(j.date) as day_of_month,
@@ -368,53 +363,6 @@ class InternalTransferService
     }
 
     /**
-     * Update pattern statistics for machine learning
-     */
-    private function updatePatternStatistics($refType, $corporationId)
-    {
-        DB::table('corpwalletmanager_transfer_patterns')
-            ->updateOrInsert(
-                [
-                    'corporation_id' => $corporationId,
-                    'pattern_type' => 'ref_type',
-                    'pattern_value' => $refType
-                ],
-                [
-                    'match_count' => DB::raw('match_count + 1'),
-                    'last_matched_at' => Carbon::now(),
-                    'updated_at' => Carbon::now()
-                ]
-            );
-    }
-
-    /**
-     * Get internal transfers with core journal data
-     */
-    public function getInternalTransfersWithJournals($corporationId, $startDate = null, $endDate = null)
-    {
-        $query = DB::table('corpwalletmanager_internal_transfers as it')
-            ->join('corporation_wallet_journals as j', 'it.journal_id', '=', 'j.id')
-            ->where('it.corporation_id', $corporationId)
-            ->select([
-                'it.*',
-                'j.date',
-                'j.ref_type',
-                'j.amount',
-                'j.balance',
-                'j.reason',
-                'j.first_party_id',
-                'j.second_party_id',
-                'j.division'
-            ]);
-
-        if ($startDate && $endDate) {
-            $query->whereBetween('it.transaction_date', [$startDate, $endDate]);
-        }
-
-        return $query->get();
-    }
-
-    /**
      * Check if we should exclude internal transfers based on settings
      */
     public function shouldExcludeFromCharts($corporationId)
@@ -423,6 +371,6 @@ class InternalTransferService
             ->where('corporation_id', $corporationId)
             ->first();
 
-        return $settings->exclude_internal_transfers_charts ?? true;
+        return $settings ? ($settings->exclude_internal_transfers_charts ?? true) : true;
     }
 }
