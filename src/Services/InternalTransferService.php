@@ -6,6 +6,7 @@ use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Cache;
 use Carbon\Carbon;
+use Illuminate\Support\Facades\Cache;
 
 class InternalTransferService
 {
@@ -34,6 +35,52 @@ class InternalTransferService
     {
         $this->corporationId = $corporationId;
         $this->loadCustomRefTypes();
+    }
+
+    /**
+     * Get cached internal transfer IDs for performance
+     * 
+     * @param int $corporationId
+     * @param Carbon|string $startDate
+     * @param Carbon|string|null $endDate
+     * @return array
+     */
+    public function getCachedInternalTransferIds($corporationId, $startDate, $endDate = null)
+    {
+        // Convert dates to strings for cache key
+        $startStr = $startDate instanceof Carbon ? $startDate->format('Y-m-d') : $startDate;
+        $endStr = $endDate ? ($endDate instanceof Carbon ? $endDate->format('Y-m-d') : $endDate) : 'null';
+        
+        $cacheKey = "internal_transfers_{$corporationId}_{$startStr}_{$endStr}";
+        
+        return Cache::remember($cacheKey, 3600, function() use ($corporationId, $startDate, $endDate) {
+            $query = DB::table('corpwalletmanager_journal_metadata')
+                ->where('corporation_id', $corporationId)
+                ->where('is_internal_transfer', true);
+                
+            if ($endDate) {
+                $query->join('corporation_wallet_journals', 'corpwalletmanager_journal_metadata.journal_id', '=', 'corporation_wallet_journals.id')
+                      ->whereBetween('corporation_wallet_journals.date', [$startDate, $endDate]);
+            } else {
+                $query->join('corporation_wallet_journals', 'corpwalletmanager_journal_metadata.journal_id', '=', 'corporation_wallet_journals.id')
+                      ->where('corporation_wallet_journals.date', '>=', $startDate);
+            }
+            
+            return $query->pluck('journal_id')->toArray();
+        });
+    }
+    
+    /**
+     * Clear cache for a corporation
+     */
+    public function clearCache($corporationId = null)
+    {
+        if ($corporationId) {
+            Cache::tags(['corp_wallet_' . $corporationId])->flush();
+        } else {
+            // Clear all internal transfer caches
+            Cache::flush(); // Be careful with this - it clears ALL cache
+        }
     }
 
     /**
