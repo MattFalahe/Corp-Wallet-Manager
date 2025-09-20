@@ -51,6 +51,11 @@
                     </a>
                 </li>
                 <li class="nav-item">
+                    <a class="nav-link" id="internal-tab" data-toggle="tab" href="#internal" role="tab">
+                        <i class="fas fa-exchange-alt"></i> Internal Transfers
+                    </a>
+                </li>
+                <li class="nav-item">
                     <a class="nav-link" href="#reports" data-toggle="tab">
                         <i class="fas fa-file-alt"></i> Reports
                     </a>
@@ -602,6 +607,97 @@
                                     </div>
                                     <div id="cashflow-statistics" class="mt-3">
                                         <!-- Statistics will be populated here -->
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                <!-- Add the tab content -->
+                <div class="tab-pane fade" id="internal" role="tabpanel">
+                    <div class="row">
+                        <!-- Internal Transfer Summary -->
+                        <div class="col-md-6">
+                            <div class="card">
+                                <div class="card-header">
+                                    <h3 class="card-title">Internal Transfer Summary (30 Days)</h3>
+                                </div>
+                                <div class="card-body">
+                                    <div class="row">
+                                        <div class="col-md-6">
+                                            <div class="info-box bg-warning">
+                                                <span class="info-box-icon"><i class="fas fa-exchange-alt"></i></span>
+                                                <div class="info-box-content">
+                                                    <span class="info-box-text">Total Volume</span>
+                                                    <span class="info-box-number" id="internal-volume">0 ISK</span>
+                                                </div>
+                                            </div>
+                                        </div>
+                                        <div class="col-md-6">
+                                            <div class="info-box bg-info">
+                                                <span class="info-box-icon"><i class="fas fa-hashtag"></i></span>
+                                                <div class="info-box-content">
+                                                    <span class="info-box-text">Transfer Count</span>
+                                                    <span class="info-box-number" id="internal-count">0</span>
+                                                </div>
+                                            </div>
+                                        </div>
+                                    </div>
+                                    
+                                    <!-- Categories Breakdown -->
+                                    <h5 class="mt-3">By Category</h5>
+                                    <div id="internal-categories-chart"></div>
+                                </div>
+                            </div>
+                        </div>
+                        
+                        <!-- Daily Internal Transfers Chart -->
+                        <div class="col-md-6">
+                            <div class="card">
+                                <div class="card-header">
+                                    <h3 class="card-title">Daily Internal Transfers</h3>
+                                </div>
+                                <div class="card-body">
+                                    <canvas id="internal-daily-chart"></canvas>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <!-- Division Transfer Matrix -->
+                    <div class="row mt-3">
+                        <div class="col-md-12">
+                            <div class="card">
+                                <div class="card-header">
+                                    <h3 class="card-title">Division Transfer Matrix</h3>
+                                </div>
+                                <div class="card-body">
+                                    <div id="transfer-matrix" class="table-responsive">
+                                        <table class="table table-sm table-bordered">
+                                            <thead id="matrix-header"></thead>
+                                            <tbody id="matrix-body"></tbody>
+                                        </table>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <!-- Transfer Analysis -->
+                    <div class="row mt-3">
+                        <div class="col-md-12">
+                            <div class="card">
+                                <div class="card-header">
+                                    <h3 class="card-title">
+                                        Transfer Analysis
+                                        <button class="btn btn-sm btn-primary float-right" onclick="runTransferAnalysis()">
+                                            <i class="fas fa-sync"></i> Analyze
+                                        </button>
+                                    </h3>
+                                </div>
+                                <div class="card-body">
+                                    <div id="transfer-analysis">
+                                        <p class="text-muted">Click Analyze to run internal transfer analysis</p>
                                     </div>
                                 </div>
                             </div>
@@ -2710,6 +2806,163 @@ document.addEventListener('DOMContentLoaded', function() {
     }
 });
 
+// Load internal transfer statistics
+    function loadInternalTransferStats() {
+        const corpId = getCurrentCorporationId();
+        
+        $.ajax({
+            url: '{{ route("corpwalletmanager.api.internal.stats") }}',
+            data: {
+                corporation_id: corpId,
+                days: 30
+            },
+            success: function(data) {
+                // Update summary
+                $('#internal-volume').text(formatISK(data.volume || 0));
+                $('#internal-count').text(data.count || 0);
+                
+                // Update categories chart
+                if (data.by_category) {
+                    drawCategoriesChart(data.by_category);
+                }
+                
+                // Update daily chart
+                if (data.daily_data) {
+                    drawDailyInternalChart(data.daily_data);
+                }
+            }
+        });
+        
+        // Load transfer matrix
+        loadTransferMatrix(corpId);
+    }
+    
+    // Draw categories pie chart
+    function drawCategoriesChart(categories) {
+        const chartData = {
+            labels: [],
+            datasets: [{
+                data: [],
+                backgroundColor: [
+                    '#FF6384',
+                    '#36A2EB',
+                    '#FFCE56',
+                    '#4BC0C0',
+                    '#9966FF'
+                ]
+            }]
+        };
+        
+        Object.entries(categories).forEach(([category, data]) => {
+            chartData.labels.push(category.replace('_', ' ').toUpperCase());
+            chartData.datasets[0].data.push(data.total_count || 0);
+        });
+        
+        // Use Chart.js or your preferred charting library
+        // This is a placeholder - implement based on your charting setup
+    }
+    
+    // Draw daily internal transfers chart
+    function drawDailyInternalChart(dailyData) {
+        const ctx = document.getElementById('internal-daily-chart').getContext('2d');
+        
+        new Chart(ctx, {
+            type: 'bar',
+            data: {
+                labels: dailyData.map(d => d.date),
+                datasets: [
+                    {
+                        label: 'Internal In',
+                        data: dailyData.map(d => d.internal_in),
+                        backgroundColor: 'rgba(75, 192, 192, 0.5)',
+                        borderColor: 'rgba(75, 192, 192, 1)',
+                        borderWidth: 1
+                    },
+                    {
+                        label: 'Internal Out',
+                        data: dailyData.map(d => -d.internal_out),
+                        backgroundColor: 'rgba(255, 99, 132, 0.5)',
+                        borderColor: 'rgba(255, 99, 132, 1)',
+                        borderWidth: 1
+                    }
+                ]
+            },
+            options: {
+                responsive: true,
+                scales: {
+                    y: {
+                        beginAtZero: true,
+                        ticks: {
+                            callback: function(value) {
+                                return formatISK(Math.abs(value));
+                            }
+                        }
+                    }
+                }
+            }
+        });
+    }
+    
+    // Load transfer matrix
+    function loadTransferMatrix(corpId) {
+        $.ajax({
+            url: '{{ route("corpwalletmanager.api.internal.matrix") }}',
+            data: {
+                corporation_id: corpId,
+                days: 30
+            },
+            success: function(data) {
+                renderTransferMatrix(data);
+            }
+        });
+    }
+    
+    // Run transfer analysis
+    function runTransferAnalysis() {
+        const corpId = getCurrentCorporationId();
+        
+        $('#transfer-analysis').html('<p class="text-muted">Analyzing...</p>');
+        
+        $.ajax({
+            url: '{{ route("corpwalletmanager.api.internal.analyze") }}',
+            data: {
+                corporation_id: corpId,
+                start_date: moment().subtract(30, 'days').format('YYYY-MM-DD'),
+                end_date: moment().format('YYYY-MM-DD')
+            },
+            success: function(data) {
+                renderAnalysisResults(data);
+            },
+            error: function() {
+                $('#transfer-analysis').html('<p class="text-danger">Analysis failed</p>');
+            }
+        });
+    }
+    
+    // Add check for internal transfer settings
+    function checkInternalTransferSettings() {
+        // Show/hide internal transfer data based on settings
+        const excludeInternal = {{ $settings['exclude_internal_transfers_charts'] ?? 'true' }};
+        
+        if (excludeInternal) {
+            $('.internal-transfer-info').show();
+            $('#internal-excluded-notice').show();
+        }
+    }
+    
+    // Call on tab change
+    $('a[data-toggle="tab"]').on('shown.bs.tab', function (e) {
+        if (e.target.id === 'internal-tab') {
+            loadInternalTransferStats();
+        }
+    });
+    
+    // Initial load
+    $(document).ready(function() {
+        checkInternalTransferSettings();
+    });
+
+
 // Reports Tab Functions
 function loadReportsData() {
     generateExecutiveSummary();
@@ -2787,7 +3040,7 @@ function generateCustomReport() {
     alert('Custom report builder coming soon!');
 }
 
-// Refresh all data
+// Modify your refreshData() function to include internal transfers
 function refreshData() {
     // Load Overview tab data
     loadActualBalance();
@@ -2799,7 +3052,7 @@ function refreshData() {
     loadPredictionChart(currentPredictionDays);
     loadIncomeBreakdown();
     loadExpenseBreakdown();
-
+    
     // Check which tab is active and load its data
     const activeTab = document.querySelector('.nav-link.active').getAttribute('href');
     switch(activeTab) {
@@ -2818,19 +3071,25 @@ function refreshData() {
         case '#reports':
             loadReportsData();
             break;
+        case '#internal':  // ADD THIS CASE
+            loadInternalTransferStats();
+            break;
     }
 }
 
-// Tab change handler
+// Modify your existing tab handler to include internal transfers
 document.addEventListener('DOMContentLoaded', function() {
     // Load corporation settings first
     loadCorporationSettings();
-
+    
+    // Check internal transfer settings on load
+    checkInternalTransferSettings();  // New LINE
+    
     // Handle tab clicks directly
     $('.nav-tabs a[data-toggle="tab"]').on('click', function(e) {
         const target = $(this).attr('href');
         console.log('Tab switching to:', target);
-
+        
         // Wait for tab animation to complete
         setTimeout(function() {
             switch(target) {
@@ -2849,12 +3108,15 @@ document.addEventListener('DOMContentLoaded', function() {
                 case '#reports':
                     loadReportsData();
                     break;
+                case '#internal':  // New CASE
+                    loadInternalTransferStats();
+                    break;
             }
         }, 200);
     });
 });
 
-// Cleanup on page unload
+// Keep your existing cleanup
 window.addEventListener('beforeunload', function() {
     if (config.refreshTimer) {
         clearInterval(config.refreshTimer);
