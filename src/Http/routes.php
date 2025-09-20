@@ -170,6 +170,10 @@ Route::group([
     Route::post('/settings/internal-transfers', 'InternalTransferApiController@saveSettings')
         ->name('corpwalletmanager.api.internal.settings')
         ->middleware('can:corpwalletmanager.settings');
+
+    Route::post('/settings/internal-backfill', 'SettingsController@triggerInternalBackfill')
+        ->name('corpwalletmanager.settings.internal-backfill')
+        ->middleware('can:corpwalletmanager.settings');
     
     // Settings routes
     Route::get('/settings', 'SettingsController@index')
