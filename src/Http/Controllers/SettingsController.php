@@ -376,6 +376,24 @@ class SettingsController extends Controller
                 ->with('error', 'Failed to dispatch division prediction job. Please check logs.');
         }
     }
+
+    public function triggerInternalBackfill(Request $request)
+    {
+        try {
+            $corporationId = $request->input('corporation_id') ?? Settings::getSetting('selected_corporation_id');
+            
+            \Artisan::call('corpwalletmanager:backfill-internal', [
+                '--corporation' => $corporationId ?? 'all',
+                '--months' => 1
+            ]);
+            
+            return response()->json(['success' => true, 'message' => 'Internal transfer detection started']);
+            
+        } catch (\Exception $e) {
+            Log::error('Internal transfer backfill trigger failed', ['error' => $e->getMessage()]);
+            return response()->json(['success' => false, 'message' => 'Failed to start detection'], 500);
+        }
+    }
     
     /**
      * Get job status via AJAX
