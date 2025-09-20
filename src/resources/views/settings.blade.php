@@ -299,6 +299,71 @@
                     </div>
                 </div>
             </div>
+            
+            <!-- Internal Transfer Settings -->
+            <div class="card mb-3">
+                <div class="card-header">
+                    <h3 class="card-title">
+                        <i class="fas fa-exchange-alt"></i> Internal Transfer Settings
+                    </h3>
+                </div>
+                <div class="card-body">
+                    <div class="row">
+                        <div class="col-md-6">
+                            <div class="form-group">
+                                <label for="exclude_internal_transfers_charts">
+                                    <input type="checkbox" 
+                                           name="exclude_internal_transfers_charts" 
+                                           id="exclude_internal_transfers_charts"
+                                           value="1"
+                                           {{ old('exclude_internal_transfers_charts', $settings['exclude_internal_transfers_charts'] ?? true) ? 'checked' : '' }}>
+                                    Exclude Internal Transfers from Charts
+                                </label>
+                                <small class="form-text text-muted">
+                                    When enabled, internal division transfers won't affect income/expense charts
+                                </small>
+                            </div>
+                            
+                            <div class="form-group">
+                                <label for="show_internal_transfers_separately">
+                                    <input type="checkbox" 
+                                           name="show_internal_transfers_separately" 
+                                           id="show_internal_transfers_separately"
+                                           value="1"
+                                           {{ old('show_internal_transfers_separately', $settings['show_internal_transfers_separately'] ?? true) ? 'checked' : '' }}>
+                                    Show Internal Transfers as Separate Category
+                                </label>
+                                <small class="form-text text-muted">
+                                    Display internal transfers as a distinct category in transaction breakdowns
+                                </small>
+                            </div>
+                        </div>
+                        
+                        <div class="col-md-6">
+                            <div class="form-group">
+                                <label>Internal Transfer Detection Status</label>
+                                <div class="info-box bg-info">
+                                    <span class="info-box-icon"><i class="fas fa-sync"></i></span>
+                                    <div class="info-box-content">
+                                        <span class="info-box-text">Detected Transfers</span>
+                                        <span class="info-box-number" id="internal-transfer-count">Loading...</span>
+                                    </div>
+                                </div>
+                            </div>
+                            
+                            <div class="form-group">
+                                <button type="button" class="btn btn-sm btn-warning" onclick="runInternalTransferBackfill()">
+                                    <i class="fas fa-history"></i> Run Internal Transfer Detection
+                                </button>
+                                <small class="form-text text-muted">
+                                    Scan historical data for internal transfers
+                                </small>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            
             <!-- Save Button Row -->
             <div class="card mt-3">
                 <div class="card-body">
@@ -584,6 +649,55 @@ function loadAccessLogs() {
                 '<tr><td colspan="5" class="text-center text-muted">Access logs not available yet. Run migrations if needed.</td></tr>';
         });
 }
+    // Load internal transfer stats
+    function loadInternalTransferStats() {
+        $.ajax({
+            url: '{{ route("corpwalletmanager.api.internal.stats") }}',
+            data: {
+                corporation_id: $('#selected_corporation_id').val() || null,
+                days: 30
+            },
+            success: function(data) {
+                $('#internal-transfer-count').text(data.count || '0');
+            },
+            error: function() {
+                $('#internal-transfer-count').text('Error loading');
+            }
+        });
+    }
+    
+    // Run internal transfer backfill
+    function runInternalTransferBackfill() {
+        if (!confirm('This will scan the last 30 days of transactions. Continue?')) {
+            return;
+        }
+        
+        $.ajax({
+            url: '{{ route("corpwalletmanager.settings.internal-backfill") }}',
+            method: 'POST',
+            data: {
+                _token: '{{ csrf_token() }}',
+                corporation_id: $('#selected_corporation_id').val()
+            },
+            success: function(response) {
+                alert('Internal transfer detection started. Check job status for progress.');
+                setTimeout(loadInternalTransferStats, 5000);
+            },
+            error: function(xhr) {
+                alert('Failed to start detection: ' + (xhr.responseJSON?.message || 'Unknown error'));
+            }
+        });
+    }
+    
+    // Load stats on page load
+    $(document).ready(function() {
+        loadInternalTransferStats();
+        
+        // Reload when corporation changes
+        $('#selected_corporation_id').change(function() {
+            loadInternalTransferStats();
+        });
+    });
 
 // Auto-refresh job status every 30 seconds
 setInterval(refreshJobStatus, 30000);
