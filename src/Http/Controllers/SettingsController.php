@@ -46,6 +46,14 @@ class SettingsController extends Controller
                 'goal_savings_target' => '1000000000',
                 'goal_activity_target' => '1000',
                 'goal_growth_target' => '10',
+                // Discord settings
+                'discord_webhook_enabled' => false,
+                'discord_webhook_url' => '',
+                'discord_daily_report' => false,
+                'discord_weekly_report' => false,
+                'discord_monthly_report' => false,
+                'discord_alert_low_balance' => false,
+                'discord_alert_large_transactions' => false,
             ];
             
             // Merge defaults with saved settings
@@ -55,7 +63,10 @@ class SettingsController extends Controller
             foreach (['use_precomputed_predictions', 'use_precomputed_monthly_balances', 
                       'member_show_health', 'member_show_trends', 'member_show_activity',
                       'member_show_goals', 'member_show_milestones', 'member_show_balance',
-                      'member_show_performance'] as $key) {
+                      'member_show_performance',
+                      'discord_webhook_enabled', 'discord_daily_report', 
+                      'discord_weekly_report', 'discord_monthly_report',
+                      'discord_alert_low_balance', 'discord_alert_large_transactions'] as $key) {
                 if (isset($settings[$key])) {
                     $settings[$key] = in_array($settings[$key], ['1', 'true', true], true);
                 }
@@ -136,6 +147,12 @@ class SettingsController extends Controller
                 'member_show_milestones',
                 'member_show_balance',
                 'member_show_performance',
+                'discord_webhook_enabled',
+                'discord_daily_report',
+                'discord_weekly_report',
+                'discord_monthly_report',
+                'discord_alert_low_balance',
+                'discord_alert_large_transactions',
             ];
             
             // Build settings array
@@ -150,6 +167,7 @@ class SettingsController extends Controller
                 'goal_savings_target' => $request->input('goal_savings_target', '1000000000'),
                 'goal_activity_target' => $request->input('goal_activity_target', '1000'),
                 'goal_growth_target' => $request->input('goal_growth_target', '10'),
+                'discord_webhook_url' => $request->input('discord_webhook_url', ''),
             ];
             
             // Handle checkboxes

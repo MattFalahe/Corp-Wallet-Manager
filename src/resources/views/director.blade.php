@@ -609,93 +609,206 @@
                     </div>
                 </div>
 
-                <!-- Reports Tab -->
-                <div class="tab-pane" id="reports">
-                    <div class="row mt-3">
+               <!-- Reports Tab -->
+                <div class="tab-pane fade" id="reports" role="tabpanel">
+                    
+                    <!-- Executive Summary Section -->
+                    <div class="row mb-3">
                         <div class="col-12">
                             <div class="card">
                                 <div class="card-header">
-                                    <h3 class="card-title">Executive Summary</h3>
-                                    <div class="card-tools">
-                                        <button class="btn btn-sm btn-primary" onclick="exportReport('pdf')">
-                                            <i class="fas fa-file-pdf"></i> Export PDF
-                                        </button>
-                                        <button class="btn btn-sm btn-success" onclick="exportReport('excel')">
-                                            <i class="fas fa-file-excel"></i> Export Excel
-                                        </button>
-                                    </div>
+                                    <h3 class="card-title">
+                                        <i class="fas fa-chart-line"></i> Executive Summary
+                                    </h3>
                                 </div>
                                 <div class="card-body">
-                                    <div id="executive-summary">
-                                        <h4>Key Insights</h4>
-                                        <ul id="key-insights">
-                                            <li>Loading insights...</li>
-                                        </ul>
-
-                                        <h4 class="mt-4">Recommendations</h4>
-                                        <ul id="recommendations">
-                                            <li>Loading recommendations...</li>
-                                        </ul>
-
-                                        <h4 class="mt-4">Risk Assessment</h4>
-                                        <div id="risk-assessment">
-                                            <p class="text-muted">Analyzing risks...</p>
+                                    <div class="row">
+                                        <div class="col-md-6">
+                                            <h5>Key Insights</h5>
+                                            <ul id="key-insights">
+                                                <li><i class="fas fa-spinner fa-spin"></i> Loading insights...</li>
+                                            </ul>
+                                            
+                                            <h5 class="mt-3">Recommendations</h5>
+                                            <ul id="recommendations">
+                                                <li><i class="fas fa-spinner fa-spin"></i> Loading recommendations...</li>
+                                            </ul>
+                                        </div>
+                                        <div class="col-md-6">
+                                            <h5>Risk Assessment</h5>
+                                            <div id="risk-assessment">
+                                                <i class="fas fa-spinner fa-spin"></i> Loading risk assessment...
+                                            </div>
                                         </div>
                                     </div>
                                 </div>
                             </div>
                         </div>
                     </div>
-
-                    <div class="row mt-3">
-                        <div class="col-md-6">
+                
+                    <!-- Report Generator Section -->
+                    <div class="row mb-3">
+                        <div class="col-12">
                             <div class="card">
                                 <div class="card-header">
-                                    <h3 class="card-title">Monthly Report</h3>
+                                    <h3 class="card-title">
+                                        <i class="fas fa-file-alt"></i> Generate Report
+                                    </h3>
                                 </div>
                                 <div class="card-body">
-                                    <select class="form-control mb-3" id="report-month">
-                                        <!-- Will be populated with months -->
-                                    </select>
-                                    <button class="btn btn-primary" onclick="generateMonthlyReport()">
-                                        Generate Report
-                                    </button>
-                                    <div id="monthly-report-content" class="mt-3">
-                                        <!-- Report will appear here -->
+                                    <form id="reportGeneratorForm">
+                                        <div class="row">
+                                            <div class="col-md-3">
+                                                <div class="form-group">
+                                                    <label for="report_type">Report Type</label>
+                                                    <select class="form-control" id="report_type" name="report_type">
+                                                        <option value="executive">Executive Summary</option>
+                                                        <option value="financial">Financial Analysis</option>
+                                                        <option value="division">Division Performance</option>
+                                                        <option value="custom">Custom Report</option>
+                                                    </select>
+                                                </div>
+                                            </div>
+                
+                                            <div class="col-md-3">
+                                                <div class="form-group">
+                                                    <label for="date_from">From Date</label>
+                                                    <input type="date" class="form-control" id="date_from" name="date_from">
+                                                </div>
+                                            </div>
+                
+                                            <div class="col-md-3">
+                                                <div class="form-group">
+                                                    <label for="date_to">To Date</label>
+                                                    <input type="date" class="form-control" id="date_to" name="date_to">
+                                                </div>
+                                            </div>
+                
+                                            <div class="col-md-3">
+                                                <div class="form-group">
+                                                    <label>&nbsp;</label>
+                                                    <div>
+                                                        <button type="button" class="btn btn-sm btn-secondary" onclick="setQuickDate('week')">
+                                                            This Week
+                                                        </button>
+                                                        <button type="button" class="btn btn-sm btn-secondary" onclick="setQuickDate('month')">
+                                                            This Month
+                                                        </button>
+                                                    </div>
+                                                </div>
+                                            </div>
+                                        </div>
+                
+                                        <!-- Custom Report Sections (hidden by default) -->
+                                        <div class="row" id="custom-sections" style="display: none;">
+                                            <div class="col-12">
+                                                <div class="form-group">
+                                                    <label>Include Sections</label>
+                                                    <div class="row">
+                                                        <div class="col-md-4">
+                                                            <div class="custom-control custom-checkbox">
+                                                                <input type="checkbox" class="custom-control-input" id="section_balance" value="balance_history" checked>
+                                                                <label class="custom-control-label" for="section_balance">Balance History</label>
+                                                            </div>
+                                                            <div class="custom-control custom-checkbox">
+                                                                <input type="checkbox" class="custom-control-input" id="section_income" value="income_analysis" checked>
+                                                                <label class="custom-control-label" for="section_income">Income Analysis</label>
+                                                            </div>
+                                                        </div>
+                                                        <div class="col-md-4">
+                                                            <div class="custom-control custom-checkbox">
+                                                                <input type="checkbox" class="custom-control-input" id="section_expense" value="expense_analysis" checked>
+                                                                <label class="custom-control-label" for="section_expense">Expense Analysis</label>
+                                                            </div>
+                                                            <div class="custom-control custom-checkbox">
+                                                                <input type="checkbox" class="custom-control-input" id="section_transactions" value="transaction_breakdown" checked>
+                                                                <label class="custom-control-label" for="section_transactions">Transaction Breakdown</label>
+                                                            </div>
+                                                        </div>
+                                                        <div class="col-md-4">
+                                                            <div class="custom-control custom-checkbox">
+                                                                <input type="checkbox" class="custom-control-input" id="section_divisions" value="division_summary" checked>
+                                                                <label class="custom-control-label" for="section_divisions">Division Summary</label>
+                                                            </div>
+                                                            <div class="custom-control custom-checkbox">
+                                                                <input type="checkbox" class="custom-control-input" id="section_risk" value="risk_assessment" checked>
+                                                                <label class="custom-control-label" for="section_risk">Risk Assessment</label>
+                                                            </div>
+                                                        </div>
+                                                    </div>
+                                                </div>
+                                            </div>
+                                        </div>
+                
+                                        <div class="row">
+                                            <div class="col-md-6">
+                                                <div class="custom-control custom-checkbox">
+                                                    <input type="checkbox" class="custom-control-input" id="send_to_discord">
+                                                    <label class="custom-control-label" for="send_to_discord">
+                                                        Send to Discord <small class="text-muted">(if enabled in settings)</small>
+                                                    </label>
+                                                </div>
+                                            </div>
+                                        </div>
+                
+                                        <div class="form-group mt-3">
+                                            <button type="submit" class="btn btn-primary">
+                                                <i class="fas fa-play"></i> Generate Report
+                                            </button>
+                                            <button type="button" class="btn btn-info" onclick="loadReportHistory()">
+                                                <i class="fas fa-sync-alt"></i> Refresh History
+                                            </button>
+                                        </div>
+                
+                                        <div id="report-status" class="mt-2"></div>
+                                    </form>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                
+                    <!-- Report History Section -->
+                    <div class="row">
+                        <div class="col-12">
+                            <div class="card">
+                                <div class="card-header">
+                                    <h3 class="card-title">
+                                        <i class="fas fa-history"></i> Report History
+                                    </h3>
+                                </div>
+                                <div class="card-body">
+                                    <div id="report-history-table">
+                                        <div class="text-center">
+                                            <i class="fas fa-spinner fa-spin"></i> Loading report history...
+                                        </div>
                                     </div>
                                 </div>
                             </div>
                         </div>
-                        <div class="col-md-6">
-                            <div class="card">
-                                <div class="card-header">
-                                    <h3 class="card-title">Custom Report Builder</h3>
+                    </div>
+                
+                </div>
+                <!-- End Reports Tab -->
+                
+                <!-- Report View Modal -->
+                <div class="modal fade" id="reportViewModal" tabindex="-1" role="dialog">
+                    <div class="modal-dialog modal-xl" role="document">
+                        <div class="modal-content">
+                            <div class="modal-header">
+                                <h5 class="modal-title">
+                                    <i class="fas fa-file-alt"></i> Report Details
+                                </h5>
+                                <button type="button" class="close" data-dismiss="modal">
+                                    <span>&times;</span>
+                                </button>
+                            </div>
+                            <div class="modal-body" id="reportModalContent">
+                                <div class="text-center">
+                                    <i class="fas fa-spinner fa-spin"></i> Loading report...
                                 </div>
-                                <div class="card-body">
-                                    <div class="form-group">
-                                        <label>Date Range</label>
-                                        <input type="date" class="form-control mb-2" id="report-start">
-                                        <input type="date" class="form-control" id="report-end">
-                                    </div>
-                                    <div class="form-group">
-                                        <label>Include Sections</label>
-                                        <div class="form-check">
-                                            <input class="form-check-input" type="checkbox" id="inc-balance" checked>
-                                            <label class="form-check-label" for="inc-balance">Balance History</label>
-                                        </div>
-                                        <div class="form-check">
-                                            <input class="form-check-input" type="checkbox" id="inc-income" checked>
-                                            <label class="form-check-label" for="inc-income">Income Analysis</label>
-                                        </div>
-                                        <div class="form-check">
-                                            <input class="form-check-input" type="checkbox" id="inc-expense" checked>
-                                            <label class="form-check-label" for="inc-expense">Expense Analysis</label>
-                                        </div>
-                                    </div>
-                                    <button class="btn btn-success" onclick="generateCustomReport()">
-                                        Build Report
-                                    </button>
-                                </div>
+                            </div>
+                            <div class="modal-footer">
+                                <button type="button" class="btn btn-secondary" data-dismiss="modal">Close</button>
                             </div>
                         </div>
                     </div>
@@ -2775,16 +2888,361 @@ function populateReportMonths() {
     select.innerHTML = html;
 }
 
-function exportReport(format) {
-    alert('Export to ' + format.toUpperCase() + ' feature coming soon!');
+// Set default dates on page load
+document.addEventListener('DOMContentLoaded', function() {
+    const today = new Date();
+    const monthAgo = new Date(today);
+    monthAgo.setMonth(monthAgo.getMonth() - 1);
+    
+    document.getElementById('date_to').value = today.toISOString().split('T')[0];
+    document.getElementById('date_from').value = monthAgo.toISOString().split('T')[0];
+});
+
+// Show/hide custom sections based on report type
+document.getElementById('report_type').addEventListener('change', function() {
+    const customSections = document.getElementById('custom-sections');
+    if (this.value === 'custom') {
+        customSections.style.display = 'block';
+    } else {
+        customSections.style.display = 'none';
+    }
+});
+
+// Set quick date ranges
+function setQuickDate(range) {
+    const today = new Date();
+    const dateFrom = document.getElementById('date_from');
+    const dateTo = document.getElementById('date_to');
+    
+    dateTo.value = today.toISOString().split('T')[0];
+    
+    switch(range) {
+        case 'week':
+            const weekAgo = new Date(today);
+            weekAgo.setDate(weekAgo.getDate() - 7);
+            dateFrom.value = weekAgo.toISOString().split('T')[0];
+            break;
+        case 'month':
+            const monthAgo = new Date(today);
+            monthAgo.setMonth(monthAgo.getMonth() - 1);
+            dateFrom.value = monthAgo.toISOString().split('T')[0];
+            break;
+    }
 }
 
+// Generate report (replaces generateMonthlyReport and generateCustomReport)
+document.getElementById('reportGeneratorForm').addEventListener('submit', function(e) {
+    e.preventDefault();
+    
+    const reportType = document.getElementById('report_type').value;
+    const dateFrom = document.getElementById('date_from').value;
+    const dateTo = document.getElementById('date_to').value;
+    const sendToDiscord = document.getElementById('send_to_discord').checked;
+    
+    // Get selected sections for custom reports
+    let sections = [];
+    if (reportType === 'custom') {
+        const checkboxes = document.querySelectorAll('#custom-sections input[type="checkbox"]:checked');
+        sections = Array.from(checkboxes).map(cb => cb.value);
+        
+        if (sections.length === 0) {
+            alert('Please select at least one section for your custom report');
+            return;
+        }
+    }
+    
+    // Show loading status
+    document.getElementById('report-status').innerHTML = 
+        '<div class="alert alert-info"><i class="fas fa-spinner fa-spin"></i> Generating report...</div>';
+    
+    // Generate report
+    fetch(buildUrl('/corp-wallet-manager/reports/generate'), {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json',
+            'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]')?.getAttribute('content') || ''
+        },
+        body: JSON.stringify({
+            report_type: reportType,
+            date_from: dateFrom,
+            date_to: dateTo,
+            sections: sections,
+            send_to_discord: sendToDiscord
+        })
+    })
+    .then(response => response.json())
+    .then(data => {
+        if (data.success) {
+            document.getElementById('report-status').innerHTML = 
+                '<div class="alert alert-success"><i class="fas fa-check"></i> ' + data.message + '</div>';
+            
+            // Refresh report history
+            setTimeout(() => {
+                loadReportHistory();
+            }, 1000);
+        } else {
+            document.getElementById('report-status').innerHTML = 
+                '<div class="alert alert-danger"><i class="fas fa-times"></i> ' + data.message + '</div>';
+        }
+    })
+    .catch(error => {
+        console.error('Error:', error);
+        document.getElementById('report-status').innerHTML = 
+            '<div class="alert alert-danger"><i class="fas fa-times"></i> Failed to generate report</div>';
+    });
+});
+
+// Load report history
+function loadReportHistory() {
+    fetch(buildUrl('/corp-wallet-manager/reports/history'))
+        .then(response => response.json())
+        .then(data => {
+            const historyDiv = document.getElementById('report-history-table');
+            
+            if (data.reports && data.reports.length > 0) {
+                let html = '<div class="table-responsive"><table class="table table-hover table-sm">';
+                html += '<thead><tr>';
+                html += '<th>Type</th><th>Period</th><th>Generated</th><th>Actions</th>';
+                html += '</tr></thead><tbody>';
+                
+                data.reports.forEach(report => {
+                    const created = new Date(report.created_at).toLocaleString();
+                    const typeBadge = {
+                        'executive': 'badge-primary',
+                        'financial': 'badge-success',
+                        'division': 'badge-info',
+                        'custom': 'badge-warning'
+                    }[report.report_type] || 'badge-secondary';
+                    
+                    html += `<tr>
+                        <td><span class="badge ${typeBadge}">${report.report_type}</span></td>
+                        <td><small>${report.date_from} to ${report.date_to}</small></td>
+                        <td><small>${created}</small></td>
+                        <td>
+                            <button class="btn btn-sm btn-primary" onclick="viewReport(${report.id})">
+                                <i class="fas fa-eye"></i> View
+                            </button>
+                        </td>
+                    </tr>`;
+                });
+                
+                html += '</tbody></table></div>';
+                historyDiv.innerHTML = html;
+            } else {
+                historyDiv.innerHTML = '<p class="text-muted">No reports generated yet.</p>';
+            }
+        })
+        .catch(error => {
+            console.error('Error loading report history:', error);
+            document.getElementById('report-history-table').innerHTML = 
+                '<p class="text-danger">Failed to load report history</p>';
+        });
+}
+
+// View report in modal
+function viewReport(reportId) {
+    // Show modal
+    $('#reportViewModal').modal('show');
+    
+    // Load report data
+    document.getElementById('reportModalContent').innerHTML = 
+        '<div class="text-center"><i class="fas fa-spinner fa-spin fa-2x"></i><p class="mt-2">Loading report...</p></div>';
+    
+    // Fetch report from history
+    fetch(buildUrl('/corp-wallet-manager/reports/history'))
+        .then(response => response.json())
+        .then(data => {
+            const report = data.reports.find(r => r.id == reportId);
+            
+            if (!report) {
+                document.getElementById('reportModalContent').innerHTML = 
+                    '<div class="alert alert-danger">Report not found</div>';
+                return;
+            }
+            
+            // Parse report data
+            const reportData = JSON.parse(report.data);
+            
+            // Build report HTML
+            let html = '<div class="report-content">';
+            
+            // Header
+            html += `<div class="row mb-3">
+                <div class="col-md-6">
+                    <h4>${getReportTitle(report.report_type)}</h4>
+                    <p class="text-muted">
+                        Period: ${report.date_from} to ${report.date_to} 
+                        (${reportData.period.days} days)
+                    </p>
+                </div>
+                <div class="col-md-6 text-right">
+                    <small class="text-muted">Generated: ${new Date(report.created_at).toLocaleString()}</small>
+                </div>
+            </div>`;
+            
+            // Balance History
+            if (reportData.balance_history) {
+                const bh = reportData.balance_history;
+                const changeClass = bh.change >= 0 ? 'text-success' : 'text-danger';
+                const changeIcon = bh.change >= 0 ? 'fa-arrow-up' : 'fa-arrow-down';
+                
+                html += `<div class="card mb-3">
+                    <div class="card-header"><strong>Balance History</strong></div>
+                    <div class="card-body">
+                        <div class="row">
+                            <div class="col-md-4">
+                                <p><strong>Starting Balance:</strong><br>${formatISK(bh.start_balance)}</p>
+                            </div>
+                            <div class="col-md-4">
+                                <p><strong>Ending Balance:</strong><br>${formatISK(bh.end_balance)}</p>
+                            </div>
+                            <div class="col-md-4">
+                                <p><strong>Change:</strong><br>
+                                    <span class="${changeClass}">
+                                        <i class="fas ${changeIcon}"></i> 
+                                        ${formatISK(bh.change)} (${bh.change_percent >= 0 ? '+' : ''}${bh.change_percent.toFixed(2)}%)
+                                    </span>
+                                </p>
+                            </div>
+                        </div>
+                    </div>
+                </div>`;
+            }
+            
+            // Income & Expenses
+            if (reportData.income_analysis && reportData.expense_analysis) {
+                html += `<div class="row mb-3">
+                    <div class="col-md-6">
+                        <div class="card">
+                            <div class="card-header bg-success text-white"><strong>Income Analysis</strong></div>
+                            <div class="card-body">
+                                <p><strong>Total Income:</strong> ${formatISK(reportData.income_analysis.total)}</p>
+                                <p><strong>Transactions:</strong> ${reportData.income_analysis.transactions.toLocaleString()}</p>
+                                <p><strong>Average:</strong> ${formatISK(reportData.income_analysis.average)}</p>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="col-md-6">
+                        <div class="card">
+                            <div class="card-header bg-danger text-white"><strong>Expense Analysis</strong></div>
+                            <div class="card-body">
+                                <p><strong>Total Expenses:</strong> ${formatISK(reportData.expense_analysis.total)}</p>
+                                <p><strong>Transactions:</strong> ${reportData.expense_analysis.transactions.toLocaleString()}</p>
+                                <p><strong>Average:</strong> ${formatISK(reportData.expense_analysis.average)}</p>
+                            </div>
+                        </div>
+                    </div>
+                </div>`;
+            }
+            
+            // Risk Assessment
+            if (reportData.risk_assessment) {
+                const risk = reportData.risk_assessment;
+                const riskColors = {
+                    'HIGH': 'danger',
+                    'MEDIUM': 'warning',
+                    'LOW': 'success',
+                    'VERY_LOW': 'info'
+                };
+                const riskColor = riskColors[risk.risk_level] || 'secondary';
+                
+                html += `<div class="card mb-3">
+                    <div class="card-header bg-${riskColor} text-white"><strong>Risk Assessment</strong></div>
+                    <div class="card-body">
+                        <div class="row">
+                            <div class="col-md-4">
+                                <p><strong>Risk Level:</strong><br>
+                                    <span class="badge badge-${riskColor}">${risk.risk_level}</span>
+                                </p>
+                            </div>
+                            <div class="col-md-4">
+                                <p><strong>Days of Runway:</strong><br>${risk.days_of_runway.toFixed(1)} days</p>
+                            </div>
+                            <div class="col-md-4">
+                                <p><strong>Current Balance:</strong><br>${formatISK(risk.current_balance)}</p>
+                            </div>
+                        </div>
+                    </div>
+                </div>`;
+            }
+            
+            // Division Summary
+            if (reportData.division_summary && reportData.division_summary.length > 0) {
+                html += `<div class="card">
+                    <div class="card-header"><strong>Division Performance</strong></div>
+                    <div class="card-body">
+                        <div class="table-responsive">
+                            <table class="table table-sm">
+                                <thead>
+                                    <tr>
+                                        <th>Division</th>
+                                        <th>Income</th>
+                                        <th>Expenses</th>
+                                        <th>Net Change</th>
+                                    </tr>
+                                </thead>
+                                <tbody>`;
+                
+                reportData.division_summary.forEach(div => {
+                    const netClass = div.net_change >= 0 ? 'text-success' : 'text-danger';
+                    html += `<tr>
+                        <td>Division ${div.division}</td>
+                        <td class="text-success">${formatISK(div.income)}</td>
+                        <td class="text-danger">${formatISK(div.expenses)}</td>
+                        <td class="${netClass}">${formatISK(div.net_change)}</td>
+                    </tr>`;
+                });
+                
+                html += `</tbody></table></div>
+                    </div>
+                </div>`;
+            }
+            
+            html += '</div>';
+            
+            document.getElementById('reportModalContent').innerHTML = html;
+        })
+        .catch(error => {
+            console.error('Error viewing report:', error);
+            document.getElementById('reportModalContent').innerHTML = 
+                '<div class="alert alert-danger">Failed to load report</div>';
+        });
+}
+
+// Helper function for report titles
+function getReportTitle(type) {
+    const titles = {
+        'executive': 'Executive Summary Report',
+        'financial': 'Financial Analysis Report',
+        'division': 'Division Performance Report',
+        'custom': 'Custom Report'
+    };
+    return titles[type] || 'Report';
+}
+
+// Update loadReportsData() function
+function loadReportsData() {
+    generateExecutiveSummary();
+    loadReportHistory();
+}
+
+// Remove old placeholder functions (if they still exist)
 function generateMonthlyReport() {
-    alert('Monthly report generation coming soon!');
+    // This is now handled by the form submission
+    document.getElementById('report_type').value = 'financial';
+    document.getElementById('reportGeneratorForm').scrollIntoView({ behavior: 'smooth' });
 }
 
 function generateCustomReport() {
-    alert('Custom report builder coming soon!');
+    // This is now handled by the form submission  
+    document.getElementById('report_type').value = 'custom';
+    document.getElementById('custom-sections').style.display = 'block';
+    document.getElementById('reportGeneratorForm').scrollIntoView({ behavior: 'smooth' });
+}
+
+function exportReport(format) {
+    alert('Export to ' + format.toUpperCase() + ' will be added in a future update.\n\n' +
+          'For now, you can view and send reports to Discord.');
 }
 
 // Refresh all data

@@ -299,6 +299,103 @@
                     </div>
                 </div>
             </div>
+            
+            <!-- Discord Webhook Integration Section --> 
+            <div class="card mt-3">
+                <div class="card-header">
+                    <h3 class="card-title">
+                        <i class="fab fa-discord"></i> Discord Integration
+                    </h3>
+                </div>
+                <div class="card-body">
+                    <div class="row">
+                        <div class="col-md-6">
+                            <div class="form-group">
+                                <label>
+                                    <input type="checkbox" name="discord_webhook_enabled" value="1" 
+                                           {{ $settings['discord_webhook_enabled'] ?? false ? 'checked' : '' }}>
+                                    Enable Discord Webhooks
+                                </label>
+                                <small class="form-text text-muted">
+                                    Send automated reports to Discord
+                                </small>
+                            </div>
+            
+                            <div class="form-group">
+                                <label for="discord_webhook_url">Discord Webhook URL</label>
+                                <input type="text" class="form-control" id="discord_webhook_url" 
+                                       name="discord_webhook_url" 
+                                       value="{{ $settings['discord_webhook_url'] ?? '' }}"
+                                       placeholder="https://discord.com/api/webhooks/...">
+                                <small class="form-text text-muted">
+                                    Create a webhook in your Discord server settings → Integrations → Webhooks
+                                </small>
+                            </div>
+            
+                            <button type="button" class="btn btn-secondary btn-sm" id="test-webhook-btn">
+                                <i class="fas fa-paper-plane"></i> Test Webhook
+                            </button>
+                            <div id="webhook-test-result" class="mt-2"></div>
+                        </div>
+            
+                        <div class="col-md-6">
+                            <div class="form-group">
+                                <label>Report Automation</label>
+                                
+                                <div class="custom-control custom-checkbox">
+                                    <input type="checkbox" class="custom-control-input" 
+                                           id="discord_daily_report" name="discord_daily_report" value="1"
+                                           {{ $settings['discord_daily_report'] ?? false ? 'checked' : '' }}>
+                                    <label class="custom-control-label" for="discord_daily_report">
+                                        Send daily summary at 00:00 UTC
+                                    </label>
+                                </div>
+            
+                                <div class="custom-control custom-checkbox">
+                                    <input type="checkbox" class="custom-control-input" 
+                                           id="discord_weekly_report" name="discord_weekly_report" value="1"
+                                           {{ $settings['discord_weekly_report'] ?? false ? 'checked' : '' }}>
+                                    <label class="custom-control-label" for="discord_weekly_report">
+                                        Send weekly summary on Mondays
+                                    </label>
+                                </div>
+            
+                                <div class="custom-control custom-checkbox">
+                                    <input type="checkbox" class="custom-control-input" 
+                                           id="discord_monthly_report" name="discord_monthly_report" value="1"
+                                           {{ $settings['discord_monthly_report'] ?? false ? 'checked' : '' }}>
+                                    <label class="custom-control-label" for="discord_monthly_report">
+                                        Send monthly summary on 1st of month
+                                    </label>
+                                </div>
+                            </div>
+            
+                            <div class="form-group">
+                                <label>Notification Triggers</label>
+                                
+                                <div class="custom-control custom-checkbox">
+                                    <input type="checkbox" class="custom-control-input" 
+                                           id="discord_alert_low_balance" name="discord_alert_low_balance" value="1"
+                                           {{ $settings['discord_alert_low_balance'] ?? false ? 'checked' : '' }}>
+                                    <label class="custom-control-label" for="discord_alert_low_balance">
+                                        Alert when balance is low
+                                    </label>
+                                </div>
+            
+                                <div class="custom-control custom-checkbox">
+                                    <input type="checkbox" class="custom-control-input" 
+                                           id="discord_alert_large_transactions" name="discord_alert_large_transactions" value="1"
+                                           {{ $settings['discord_alert_large_transactions'] ?? false ? 'checked' : '' }}>
+                                    <label class="custom-control-label" for="discord_alert_large_transactions">
+                                        Alert on large transactions (>100M ISK)
+                                    </label>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+                        
             <!-- Save Button Row -->
             <div class="card mt-3">
                 <div class="card-body">
@@ -584,6 +681,29 @@ function loadAccessLogs() {
                 '<tr><td colspan="5" class="text-center text-muted">Access logs not available yet. Run migrations if needed.</td></tr>';
         });
 }
+// Discord Webhook Integration
+document.getElementById('test-webhook-btn').addEventListener('click', function() {
+    const resultDiv = document.getElementById('webhook-test-result');
+    resultDiv.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Testing webhook...';
+    
+    fetch('/corp-wallet-manager/reports/test-webhook', {
+        method: 'POST',
+        headers: {
+            'X-CSRF-TOKEN': '{{ csrf_token() }}'
+        }
+    })
+    .then(response => response.json())
+    .then(data => {
+        if (data.success) {
+            resultDiv.innerHTML = '<div class="alert alert-success"><i class="fas fa-check"></i> ' + data.message + '</div>';
+        } else {
+            resultDiv.innerHTML = '<div class="alert alert-danger"><i class="fas fa-times"></i> ' + data.message + '</div>';
+        }
+    })
+    .catch(error => {
+        resultDiv.innerHTML = '<div class="alert alert-danger"><i class="fas fa-times"></i> Failed to test webhook</div>';
+    });
+});
 
 // Auto-refresh job status every 30 seconds
 setInterval(refreshJobStatus, 30000);

@@ -374,19 +374,37 @@ function loadCorporationSettings() {
         .then(data => {
             config.corporationId = data.corporation_id;
             config.refreshInterval = data.refresh_interval;
-            
-            const displayText = config.corporationId 
-                ? `Viewing data for Corporation ID: ${config.corporationId}` 
-                : 'Viewing data for all corporations';
-                
-            document.getElementById('current-corp-display').textContent = displayText;
-            
+
+            // Update display with corporation name (FIXED - same as director)
+            if (config.corporationId) {
+                // Fetch corporation name from the API
+                fetch(buildUrl('/corp-wallet-manager/api/corporation-info?corporation_id=' + config.corporationId))
+                    .then(response => response.json())
+                    .then(corpData => {
+                        const displayText = corpData.name 
+                            ? `Viewing data for ${corpData.name}`
+                            : `Viewing data for Corporation ID: ${config.corporationId}`;
+                        document.getElementById('current-corp-display').textContent = displayText;
+                    })
+                    .catch(error => {
+                        // Fallback to ID if name fetch fails
+                        document.getElementById('current-corp-display').textContent = 
+                            `Viewing data for Corporation ID: ${config.corporationId}`;
+                    });
+            } else {
+                document.getElementById('current-corp-display').textContent = 'Viewing data for all corporations';
+            }
+
+            // Setup auto-refresh if enabled
             setupAutoRefresh(data.refresh_minutes);
+
+            // Load data with the correct corporation
             refreshData();
         })
         .catch(error => {
             console.error('Error loading corporation settings:', error);
             document.getElementById('current-corp-display').textContent = 'Error loading corporation settings';
+            // Load data anyway with no specific corporation
             refreshData();
         });
 }
