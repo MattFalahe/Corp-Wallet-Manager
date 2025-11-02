@@ -314,29 +314,6 @@ CREATE INDEX idx_corp_date ON corporation_wallet_journals(corporation_id, date);
 
 This project is licensed under the GPL-2.0-or-later License - see the [LICENSE](LICENSE) file for details.
 
-## Changelog
-
-### Version 1.0.5 (2025-09-13)
-- Director and Member views
-- Analytics dashboard
-- Prediction system
-- Division tracking
-- Goal management
-- Access logging
-
-## Roadmap
-
-### Planned Features
-
-- [ ] Export to Excel/PDF
-- [ ] Multi-corporation comparison
-- [ ] Custom alert rules
-- [ ] API rate limiting
-- [ ] Webhook integrations
-- [ ] Mobile-responsive improvements
-- [ ] Custom report builder
-- [ ] Budget planning tools
-
 ---
 
 Made with ❤️ for the EVE Online community
