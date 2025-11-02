@@ -37,77 +37,84 @@ class UpdateHourlyWalletData implements ShouldQueue
             
             // Update data for the last 24 hours only (efficient)
             $since = Carbon::now()->subHours(24);
-            $currentMonth = Carbon::now()->format('Y-m');
             
-            // Update monthly balances for current month
-            $query = DB::table('corporation_wallet_journals')
+            // Get unique months from the last 24 hours of data
+            $monthsToUpdate = DB::table('corporation_wallet_journals')
                 ->where('date', '>=', $since)
-                ->selectRaw('
-                    corporation_id,
-                    DATE_FORMAT(date, "%Y-%m") as month,
-                    SUM(amount) as balance
-                ')
-                ->groupBy('corporation_id', 'month');
+                ->when($corporationId, function ($query) use ($corporationId) {
+                    return $query->where('corporation_id', $corporationId);
+                })
+                ->selectRaw('DISTINCT DATE_FORMAT(date, "%Y-%m") as month')
+                ->pluck('month')
+                ->toArray();
             
-            if ($corporationId) {
-                $query->where('corporation_id', $corporationId);
-            }
-            
-            $results = $query->get();
             $processed = 0;
             
-            foreach ($results as $row) {
-                // Get existing balance for the month
-                $existing = MonthlyBalance::where('corporation_id', $row->corporation_id)
-                    ->where('month', $currentMonth)
-                    ->first();
+            // Process each month that has recent activity
+            foreach ($monthsToUpdate as $month) {
+                $monthDate = Carbon::createFromFormat('Y-m', $month)->startOfMonth();
                 
-                if ($existing) {
-                    // Recalculate for the entire month
-                    $fullMonthBalance = DB::table('corporation_wallet_journals')
-                        ->where('corporation_id', $row->corporation_id)
-                        ->whereMonth('date', Carbon::now()->month)
-                        ->whereYear('date', Carbon::now()->year)
-                        ->sum('amount');
-                    
-                    $existing->update(['balance' => $fullMonthBalance]);
-                } else {
-                    MonthlyBalance::create([
-                        'corporation_id' => $row->corporation_id,
-                        'month' => $row->month,
-                        'balance' => $row->balance
-                    ]);
+                // Get corporations with activity in this month
+                $corporationQuery = DB::table('corporation_wallet_journals')
+                    ->whereMonth('date', $monthDate->month)
+                    ->whereYear('date', $monthDate->year)
+                    ->selectRaw('
+                        corporation_id,
+                        SUM(amount) as balance
+                    ')
+                    ->groupBy('corporation_id');
+                
+                if ($corporationId) {
+                    $corporationQuery->where('corporation_id', $corporationId);
                 }
-                $processed++;
-            }
-            
-            // Also update division balances for current month
-            $divisionQuery = DB::table('corporation_wallet_journals')
-                ->where('date', '>=', $since)
-                ->selectRaw('
-                    corporation_id,
-                    division,
-                    DATE_FORMAT(date, "%Y-%m") as month,
-                    SUM(amount) as balance
-                ')
-                ->groupBy('corporation_id', 'division', 'month');
-            
-            if ($corporationId) {
-                $divisionQuery->where('corporation_id', $corporationId);
-            }
-            
-            $divisionResults = $divisionQuery->get();
-            
-            foreach ($divisionResults as $row) {
-                DivisionBalance::updateOrCreate(
-                    [
-                        'corporation_id' => $row->corporation_id,
-                        'division_id' => $row->division,
-                        'month' => $row->month
-                    ],
-                    ['balance' => $row->balance]
-                );
-                $processed++;
+                
+                $corporations = $corporationQuery->get();
+                
+                foreach ($corporations as $corp) {
+                    // Use updateOrCreate to handle duplicates gracefully
+                    MonthlyBalance::updateOrCreate(
+                        [
+                            'corporation_id' => $corp->corporation_id,
+                            'month' => $month
+                        ],
+                        [
+                            'balance' => $corp->balance
+                        ]
+                    );
+                    $processed++;
+                }
+                
+                // Update division balances for this month
+                $divisionQuery = DB::table('corporation_wallet_journals')
+                    ->whereMonth('date', $monthDate->month)
+                    ->whereYear('date', $monthDate->year)
+                    ->selectRaw('
+                        corporation_id,
+                        division,
+                        SUM(amount) as balance
+                    ')
+                    ->groupBy('corporation_id', 'division');
+                
+                if ($corporationId) {
+                    $divisionQuery->where('corporation_id', $corporationId);
+                }
+                
+                $divisions = $divisionQuery->get();
+                
+                foreach ($divisions as $div) {
+                    // Use updateOrCreate to handle duplicates gracefully
+                    DivisionBalance::updateOrCreate(
+                        [
+                            'corporation_id' => $div->corporation_id,
+                            'division_id' => $div->division,
+                            'month' => $month
+                        ],
+                        [
+                            'balance' => $div->balance
+                        ]
+                    );
+                    $processed++;
+                }
             }
             
             $logEntry->update([
@@ -117,7 +124,8 @@ class UpdateHourlyWalletData implements ShouldQueue
             ]);
             
             Log::info('UpdateHourlyWalletData completed', [
-                'records_processed' => $processed
+                'records_processed' => $processed,
+                'months_updated' => $monthsToUpdate
             ]);
             
         } catch (\Exception $e) {
@@ -130,7 +138,8 @@ class UpdateHourlyWalletData implements ShouldQueue
             }
             
             Log::error('UpdateHourlyWalletData failed', [
-                'error' => $e->getMessage()
+                'error' => $e->getMessage(),
+                'trace' => $e->getTraceAsString()
             ]);
             
             throw $e;

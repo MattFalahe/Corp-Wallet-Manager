@@ -153,6 +153,22 @@ Route::group([
     Route::get('/api/analytics/executive-summary', 'AnalyticsController@executiveSummary')
         ->name('corpwalletmanager.analytics.executive-summary')
         ->middleware('can:corpwalletmanager.director_view');
+ 
+    Route::post('/reports/generate', 'ReportsController@generate')
+        ->name('corpwalletmanager.reports.generate')
+        ->middleware('can:corpwalletmanager.director_view');
+    
+    Route::get('/reports/history', 'ReportsController@history')
+        ->name('corpwalletmanager.reports.history')
+        ->middleware('can:corpwalletmanager.director_view');
+    
+    Route::get('/reports/templates', 'ReportsController@templates')
+        ->name('corpwalletmanager.reports.templates')
+        ->middleware('can:corpwalletmanager.director_view');
+    
+    Route::post('/reports/test-webhook', 'ReportsController@testWebhook')
+        ->name('corpwalletmanager.reports.test-webhook')
+        ->middleware('can:corpwalletmanager.settings');
     
     // Settings routes
     Route::get('/settings', 'SettingsController@index')
