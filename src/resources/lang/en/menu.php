@@ -5,4 +5,5 @@ return [
     'director_view' => 'Director View',
     'member_view' => 'Member View',
     'settings' => 'Settings',
+    'help' => 'Help & Documentation',
 ];

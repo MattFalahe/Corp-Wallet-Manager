@@ -514,4 +514,12 @@ class SettingsController extends Controller
             ], 500);
         }
     }
+
+    /**
+     * Show the help & documentation page
+     */
+    public function help()
+    {
+        return view('corpwalletmanager::help.index');
+    }
 }

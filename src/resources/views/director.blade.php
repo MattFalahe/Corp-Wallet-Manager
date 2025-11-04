@@ -827,20 +827,14 @@
 if (typeof Chart === 'undefined') {
     console.error('Chart.js failed to load. Assets may not be published correctly.');
 }
-// Fix SeAT's mixed content issue first
-(function() {
-    // Wait for jQuery to be available
-    if (typeof $ !== 'undefined' && $.ajax) {
-        var originalAjax = $.ajax;
-        $.ajax = function(settings) {
-            if (settings && settings.url && typeof settings.url === 'string' && settings.url.startsWith('http://')) {
-                settings.url = settings.url.replace('http://', 'https://');
-            }
-            return originalAjax.call(this, settings);
-        };
-    }
-})();
 
+// Helper function to build URLs - respects current protocol
+function buildUrl(path) {
+    // Use window.location.origin which includes protocol, host, and port
+    // This automatically matches HTTP or HTTPS based on how the user accessed the page
+    return window.location.origin + path;
+}
+    
 // Configuration - Using Blade syntax properly
 let config = {
     decimals: {!! config('corpwalletmanager.decimals', 2) !!},
@@ -870,28 +864,6 @@ let divisionCashflowChart = null;
 let divisionMiniCharts = {};
 let currentDivisionId = null;
 let currentDivisionDays = 7;
-
-// Helper function to build URLs - FIXED VERSION
-//function buildUrl(path) {
-    // Use the current page's protocol to ensure HTTPS when needed
-//    const currentUrl = window.location;
-    // Force HTTPS if the current page is HTTPS
-//    const protocol = currentUrl.protocol; // This will be 'https:' on your site
-//    const baseUrl = protocol + '//' + currentUrl.host;
-//    return baseUrl + path;
-//}
-// Alternative more robust version if the above still has issues:
-//function buildUrl(path) {
-    // Always use the same protocol as the current page
-    // This ensures we never mix HTTP and HTTPS
-//    return window.location.origin + path;
-//}
-
-// Or if you want to ALWAYS force HTTPS (recommended for production):
-function buildUrl(path) {
-    const host = window.location.host;
-    return 'https://' + host + path;
-}
 
 // Load corporation settings
 function loadCorporationSettings() {

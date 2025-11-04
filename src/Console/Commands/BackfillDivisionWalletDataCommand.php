@@ -3,16 +3,16 @@
 namespace Seat\CorpWalletManager\Console\Commands;
 
 use Illuminate\Console\Command;
-use Seat\CorpWalletManager\Jobs\BackfillWalletData;
+use Seat\CorpWalletManager\Jobs\BackfillDivisionWalletData;
 
-class BackfillWalletDataCommand extends Command
+class BackfillDivisionWalletDataCommand extends Command
 {
     /**
      * The name and signature of the console command.
      *
      * @var string
      */
-    protected $signature = 'corpwalletmanager:backfill 
+    protected $signature = 'corpwalletmanager:backfill-divisions 
                             {year? : Specific year to backfill}
                             {month? : Specific month to backfill (1-12)}
                             {--recent : Backfill only last month}
@@ -25,7 +25,7 @@ class BackfillWalletDataCommand extends Command
      *
      * @var string
      */
-    protected $description = 'Backfill wallet data for specific periods';
+    protected $description = 'Backfill division wallet data for specific periods';
 
     /**
      * Execute the console command.
@@ -42,26 +42,26 @@ class BackfillWalletDataCommand extends Command
         $all = $this->option('all');
 
         if ($year && $month) {
-            $this->info("Backfilling data for {$year}-{$month}...");
-            BackfillWalletData::dispatch($corporationId, null, $year, $month);
+            $this->info("Backfilling division data for {$year}-{$month}...");
+            BackfillDivisionWalletData::dispatch($corporationId, null, $year, $month);
             
         } elseif ($recent) {
-            $this->info("Backfilling last month of data...");
-            BackfillWalletData::dispatch($corporationId, 1);
+            $this->info("Backfilling last month of division data...");
+            BackfillDivisionWalletData::dispatch($corporationId, 1);
             
         } elseif ($all) {
-            if (!$this->confirm('This will process ALL historical data. Continue?')) {
+            if (!$this->confirm('This will process ALL historical division data. Continue?')) {
                 return 0;
             }
-            $this->info("Backfilling all historical data...");
-            BackfillWalletData::dispatch($corporationId, null);
+            $this->info("Backfilling all historical division data...");
+            BackfillDivisionWalletData::dispatch($corporationId, null);
             
         } else {
-            $this->info("Backfilling last {$months} month(s) of data...");
-            BackfillWalletData::dispatch($corporationId, $months);
+            $this->info("Backfilling last {$months} month(s) of division data...");
+            BackfillDivisionWalletData::dispatch($corporationId, $months);
         }
         
-        $this->info("Backfill job dispatched.");
+        $this->info("Division backfill job dispatched.");
         
         return 0;
     }
