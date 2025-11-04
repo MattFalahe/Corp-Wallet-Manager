@@ -25,6 +25,12 @@ return [
                 'route' => 'corpwalletmanager.settings',
                 'permission' => 'corpwalletmanager.settings',
             ],
+            [
+                'name'  => 'Help & Documentation',
+                'icon'  => 'fas fa-question-circle',
+                'route' => 'corpwalletmanager.help',
+                'permission' => 'corpwalletmanager.view',
+            ],
         ]
     ]
 ];

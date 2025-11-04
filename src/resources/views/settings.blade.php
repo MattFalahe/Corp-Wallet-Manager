@@ -566,19 +566,13 @@
 </div>
 
 <script>
-// Fix SeAT's mixed content issue first
-(function() {
-    // Wait for jQuery to be available
-    if (typeof $ !== 'undefined' && $.ajax) {
-        var originalAjax = $.ajax;
-        $.ajax = function(settings) {
-            if (settings && settings.url && typeof settings.url === 'string' && settings.url.startsWith('http://')) {
-                settings.url = settings.url.replace('http://', 'https://');
-            }
-            return originalAjax.call(this, settings);
-        };
-    }
-})();
+
+// Helper function to build URLs - respects current protocol
+function buildUrl(path) {
+    // Use window.location.origin which includes protocol, host, and port
+    // This automatically matches HTTP or HTTPS based on how the user accessed the page
+    return window.location.origin + path;
+}
     
 function resetSettings() {
     if (confirm('Are you sure you want to reset all settings to defaults? This cannot be undone.')) {

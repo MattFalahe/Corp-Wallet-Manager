@@ -213,4 +213,9 @@ Route::group([
         ->name('corpwalletmanager.selected-corporation')
         ->middleware('can:corpwalletmanager.view');
 
+    // Help & Documentation route
+    Route::get('/help', 'SettingsController@help')
+        ->name('corpwalletmanager.help')
+        ->middleware('can:corpwalletmanager.view');
+
 });
