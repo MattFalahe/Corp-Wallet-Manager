@@ -1,5 +1,5 @@
 <?php
-namespace Seat\CorpWalletManager\Jobs;
+namespace CorpWalletManager\Jobs;
 
 use Illuminate\Bus\Queueable;
 use Illuminate\Contracts\Queue\ShouldQueue;
@@ -8,9 +8,9 @@ use Illuminate\Queue\InteractsWithQueue;
 use Illuminate\Queue\SerializesModels;
 use Illuminate\Support\Facades\Log;
 use Carbon\Carbon;
-use Seat\CorpWalletManager\Models\DivisionBalance;
-use Seat\CorpWalletManager\Models\DivisionPrediction;
-use Seat\CorpWalletManager\Models\RecalcLog;
+use CorpWalletManager\Models\DivisionBalance;
+use CorpWalletManager\Models\DivisionPrediction;
+use CorpWalletManager\Models\RecalcLog;
 
 class ComputeDivisionDailyPrediction implements ShouldQueue
 {
@@ -23,8 +23,24 @@ class ComputeDivisionDailyPrediction implements ShouldQueue
 
     public function __construct($corporationId = null, $divisionId = null)
     {
-        $this->corporationId = $corporationId;
+        // Defensive: an empty string / 0 / non-numeric value (typical when
+        // Settings::getSetting('selected_corporation_id') returns '') would
+        // otherwise reach RecalcLog::create() and trip MySQL's BIGINT type
+        // check with "Incorrect integer value: '' for column corporation_id".
+        $this->corporationId = (is_numeric($corporationId) && (int) $corporationId > 0)
+            ? (int) $corporationId
+            : null;
         $this->divisionId = $divisionId;
+    }
+
+    public function tags(): array
+    {
+        return [
+            'corpwalletmanager',
+            'predictions',
+            'divisions',
+            'corp:' . ($this->corporationId ?? 'all'),
+        ];
     }
 
     public function handle()
@@ -53,10 +69,12 @@ class ComputeDivisionDailyPrediction implements ShouldQueue
                     if (!$this->corporationId || $division->corporation_id == $this->corporationId) {
                         try {
                             $processed += $this->computePredictionsForDivision(
-                                $division->corporation_id, 
+                                $division->corporation_id,
                                 $division->division_id
                             );
-                        } catch (\Exception $e) {
+                        } catch (\Illuminate\Database\QueryException $e) {
+                            throw $e;
+                        } catch (\Throwable $e) {
                             Log::warning('ComputeDivisionDailyPrediction: Failed for division', [
                                 'corporation_id' => $division->corporation_id,
                                 'division_id' => $division->division_id,

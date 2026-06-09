@@ -1,35 +1,22 @@
 <?php
-namespace Seat\CorpWalletManager\Http\Controllers;
+namespace CorpWalletManager\Http\Controllers;
 
 use Illuminate\Routing\Controller;
 use Illuminate\Http\Request;
 use Carbon\Carbon;
+use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\DB;
-use Seat\CorpWalletManager\Models\Settings;
-use Seat\CorpWalletManager\Models\Prediction;
-use Seat\CorpWalletManager\Models\MonthlyBalance;
-use Seat\CorpWalletManager\Models\DivisionBalance;
+use CorpWalletManager\Http\Controllers\Concerns\AuthorizesCorporationAccess;
+use CorpWalletManager\Models\Settings;
+use CorpWalletManager\Models\Prediction;
+use CorpWalletManager\Models\MonthlyBalance;
+use CorpWalletManager\Models\DivisionBalance;
+use CorpWalletManager\Support\JournalFilters;
 
 class AnalyticsController extends Controller
 {
-    /**
-     * Get corporation ID from request or settings
-     */
-    private function getCorporationId(Request $request)
-    {
-        $corporationId = $request->get('corporation_id');
-        
-        if (!$corporationId) {
-            $corporationId = Settings::getSetting('selected_corporation_id');
-        }
-        
-        if ($corporationId && !is_numeric($corporationId)) {
-            return null;
-        }
-        
-        return $corporationId;
-    }
+    use AuthorizesCorporationAccess;
 
     /**
     * Get Daily Cash Flow Data
@@ -53,11 +40,14 @@ class AnalyticsController extends Controller
                 ')
                 ->groupBy('day')
                 ->orderBy('day');
-        
+
             if ($corporationId && is_numeric($corporationId)) {
                 $query->where('corporation_id', $corporationId);
+                $query = JournalFilters::excludeInternalTransfers($query, (int) $corporationId);
+            } else {
+                $query = JournalFilters::excludeInternalTransfers($query);
             }
-        
+
             $dailyData = $query->get();
         
             // Format for chart
@@ -188,11 +178,14 @@ class AnalyticsController extends Controller
                     SUM(CASE WHEN amount > 0 THEN amount ELSE 0 END) as income,
                     SUM(CASE WHEN amount < 0 THEN ABS(amount) ELSE 0 END) as expenses
                 ');
-            
+
             if ($corporationId) {
                 $financialsQuery->where('corporation_id', $corporationId);
+                $financialsQuery = JournalFilters::excludeInternalTransfers($financialsQuery, (int) $corporationId);
+            } else {
+                $financialsQuery = JournalFilters::excludeInternalTransfers($financialsQuery);
             }
-            
+
             $financials = $financialsQuery->first();
             $incomeExpenseRatio = ($financials->expenses > 0) 
                 ? $financials->income / $financials->expenses 
@@ -204,11 +197,14 @@ class AnalyticsController extends Controller
                 ->where('date', '>=', $thirtyDaysAgo)
                 ->selectRaw('DATE(date) as day, SUM(amount) as daily_change')
                 ->groupBy('day');
-            
+
             if ($corporationId) {
                 $dailyChangesQuery->where('corporation_id', $corporationId);
+                $dailyChangesQuery = JournalFilters::excludeInternalTransfers($dailyChangesQuery, (int) $corporationId);
+            } else {
+                $dailyChangesQuery = JournalFilters::excludeInternalTransfers($dailyChangesQuery);
             }
-            
+
             $dailyChanges = $dailyChangesQuery->pluck('daily_change')->toArray();
             $volatility = $this->calculateStandardDeviation($dailyChanges);
             $avgDailyChange = count($dailyChanges) > 0 ? array_sum($dailyChanges) / count($dailyChanges) : 0;
@@ -291,20 +287,23 @@ class AnalyticsController extends Controller
             
             foreach ($periods as $period => $days) {
                 $startDate = Carbon::now()->subDays($days);
-                
+
                 $query = DB::table('corporation_wallet_journals')
                     ->where('date', '>=', $startDate)
                     ->selectRaw('
                         SUM(CASE WHEN amount < 0 THEN ABS(amount) ELSE 0 END) as expenses,
                         SUM(CASE WHEN amount > 0 THEN amount ELSE 0 END) as income
                     ');
-                
+
                 if ($corporationId) {
                     $query->where('corporation_id', $corporationId);
+                    $query = JournalFilters::excludeInternalTransfers($query, (int) $corporationId);
+                } else {
+                    $query = JournalFilters::excludeInternalTransfers($query);
                 }
-                
+
                 $result = $query->first();
-                
+
                 $netBurn = ($result->expenses - $result->income) / $days;
                 $burnRates[$period] = $netBurn;
             }
@@ -364,13 +363,16 @@ class AnalyticsController extends Controller
                     SUM(CASE WHEN amount > 0 THEN amount ELSE 0 END) as income,
                     SUM(CASE WHEN amount < 0 THEN ABS(amount) ELSE 0 END) as expenses
                 ');
-            
+
             if ($corporationId) {
                 $monthlyQuery->where('corporation_id', $corporationId);
+                $monthlyQuery = JournalFilters::excludeInternalTransfers($monthlyQuery, (int) $corporationId);
+            } else {
+                $monthlyQuery = JournalFilters::excludeInternalTransfers($monthlyQuery);
             }
-            
+
             $currentMonthData = $monthlyQuery->first();
-            
+
             // Last month data for growth calculation
             $lastMonthQuery = DB::table('corporation_wallet_journals')
                 ->whereMonth('date', $lastMonth->month)
@@ -379,11 +381,14 @@ class AnalyticsController extends Controller
                     SUM(CASE WHEN amount > 0 THEN amount ELSE 0 END) as income,
                     SUM(CASE WHEN amount < 0 THEN ABS(amount) ELSE 0 END) as expenses
                 ');
-            
+
             if ($corporationId) {
                 $lastMonthQuery->where('corporation_id', $corporationId);
+                $lastMonthQuery = JournalFilters::excludeInternalTransfers($lastMonthQuery, (int) $corporationId);
+            } else {
+                $lastMonthQuery = JournalFilters::excludeInternalTransfers($lastMonthQuery);
             }
-            
+
             $lastMonthData = $lastMonthQuery->first();
             
             // Current balance
@@ -415,11 +420,14 @@ class AnalyticsController extends Controller
                 ->where('date', '>=', $thirtyDaysAgo)
                 ->selectRaw('DATE(date) as day, SUM(amount) as daily_change')
                 ->groupBy('day');
-            
+
             if ($corporationId) {
                 $dailyBalances->where('corporation_id', $corporationId);
+                $dailyBalances = JournalFilters::excludeInternalTransfers($dailyBalances, (int) $corporationId);
+            } else {
+                $dailyBalances = JournalFilters::excludeInternalTransfers($dailyBalances);
             }
-            
+
             $changes = $dailyBalances->pluck('daily_change')->toArray();
             $volatility = count($changes) > 0 ? $this->calculateStandardDeviation($changes) : 0;
             $avgChange = count($changes) > 0 ? abs(array_sum($changes) / count($changes)) : 1;
@@ -475,13 +483,16 @@ class AnalyticsController extends Controller
                 ')
                 ->groupBy('day')
                 ->orderBy('day');
-            
+
             if ($corporationId) {
                 $query->where('corporation_id', $corporationId);
+                $query = JournalFilters::excludeInternalTransfers($query, (int) $corporationId);
+            } else {
+                $query = JournalFilters::excludeInternalTransfers($query);
             }
-            
+
             $data = $query->get();
-            
+
             // Format for heatmap
             $heatmapData = [];
             foreach ($data as $day) {
@@ -538,13 +549,16 @@ class AnalyticsController extends Controller
                     SUM(CASE WHEN amount < 0 THEN ABS(amount) ELSE 0 END) as expenses
                 ')
                 ->groupBy('day');
-            
+
             if ($corporationId) {
                 $query->where('corporation_id', $corporationId);
+                $query = JournalFilters::excludeInternalTransfers($query, (int) $corporationId);
+            } else {
+                $query = JournalFilters::excludeInternalTransfers($query);
             }
-            
+
             $data = $query->get();
-            
+
             // Sort and get top/bottom 5
             $bestDays = $data->sortByDesc('income')->take(5)->map(function ($day) {
                 return [
@@ -605,11 +619,14 @@ class AnalyticsController extends Controller
                 ')
                 ->groupBy('day_of_week')
                 ->orderBy('day_of_week');
-            
+
             if ($corporationId) {
                 $query->where('corporation_id', $corporationId);
+                $query = JournalFilters::excludeInternalTransfers($query, (int) $corporationId);
+            } else {
+                $query = JournalFilters::excludeInternalTransfers($query);
             }
-            
+
             $data = $query->get();
             
             // Map day numbers to names
@@ -669,11 +686,16 @@ class AnalyticsController extends Controller
                 ->keyBy('division');
             
             // Get monthly income/expense per division
+            // Per-division aggregation is especially sensitive to inter-division
+            // transfers: both source and destination divisions show inflated activity.
             $currentMonth = Carbon::now()->startOfMonth();
-            $monthlyData = DB::table('corporation_wallet_journals')
+            $monthlyQuery = DB::table('corporation_wallet_journals')
                 ->where('corporation_id', $corporationId)
                 ->whereMonth('date', $currentMonth->month)
-                ->whereYear('date', $currentMonth->year)
+                ->whereYear('date', $currentMonth->year);
+            $monthlyQuery = JournalFilters::excludeInternalTransfers($monthlyQuery, (int) $corporationId);
+
+            $monthlyData = $monthlyQuery
                 ->selectRaw('
                     division,
                     SUM(CASE WHEN amount > 0 THEN amount ELSE 0 END) as income,
@@ -873,11 +895,14 @@ class AnalyticsController extends Controller
             $query = DB::table('corporation_wallet_journals')
                 ->where('date', '<=', $lastMonth)
                 ->where('date', '>=', $lastMonthStart);
-            
+
             if ($corporationId) {
                 $query->where('corporation_id', $corporationId);
+                $query = JournalFilters::excludeInternalTransfers($query, (int) $corporationId);
+            } else {
+                $query = JournalFilters::excludeInternalTransfers($query);
             }
-            
+
             // Get the last balance entry for the month
             $lastEntry = $query->orderBy('date', 'desc')
                 ->orderBy('id', 'desc')
@@ -949,11 +974,16 @@ class AnalyticsController extends Controller
             
             $startDate = Carbon::now()->subDays($days);
             
+            // Per-division charts are especially sensitive to inter-division
+            // transfers, since the transfer half-pair lives entirely in one
+            // division and inflates both income and expense totals there.
             $query = DB::table('corporation_wallet_journals')
                 ->where('corporation_id', $corporationId)
                 ->where('division', $divisionId)
-                ->whereDate('date', '>=', $startDate)
-                ->selectRaw('
+                ->whereDate('date', '>=', $startDate);
+            $query = JournalFilters::excludeInternalTransfers($query, (int) $corporationId);
+
+            $query = $query->selectRaw('
                     DATE(date) as day,
                     SUM(CASE WHEN amount > 0 THEN amount ELSE 0 END) as daily_income,
                     SUM(CASE WHEN amount < 0 THEN ABS(amount) ELSE 0 END) as daily_expenses,
@@ -962,7 +992,7 @@ class AnalyticsController extends Controller
                 ')
                 ->groupBy('day')
                 ->orderBy('day');
-            
+
             $dailyData = $query->get();
             
             // Get division name - using the helper method properly
@@ -1163,6 +1193,377 @@ class AnalyticsController extends Controller
                 $divisions[$i] = "Division $i";
             }
             return $divisions;
+        }
+    }
+
+    /**
+     * Top Contributors leaderboard for the Director view's Top Contributors tab.
+     * Reads from the precomputed corpwalletmanager_character_contributions cache.
+     */
+    public function topContributors(Request $request)
+    {
+        try {
+            $corporationId = $this->getCorporationId($request);
+            if (! $corporationId) {
+                return response()->json([
+                    'success'      => false,
+                    'message'      => 'Corporation not selected.',
+                    'contributors' => [],
+                ], 400);
+            }
+
+            $period = $request->get('period');
+            if (! preg_match('/^\d{4}-\d{2}$/', (string) $period)) {
+                $period = Carbon::now()->format('Y-m');
+            }
+
+            $limit = (int) $request->get('limit', 20);
+
+            $result = app(\CorpWalletManager\Services\ContributionService::class)
+                ->getTopContributors((int) $corporationId, $period, $limit);
+
+            return response()->json([
+                'success'            => true,
+                'period'             => $result['period'],
+                'mm_available'       => $result['mm_available'],
+                'has_alliance_tax'   => $result['has_alliance_tax'] ?? false,
+                'alliance_tax_rates' => $result['alliance_tax_rates'] ?? [],
+                'contributors'       => $result['contributors'],
+            ]);
+        } catch (\Exception $e) {
+            Log::error('topContributors failed', [
+                'error' => $e->getMessage(),
+            ]);
+            return response()->json([
+                'success'      => false,
+                'message'      => 'Failed to load top contributors.',
+                'contributors' => [],
+            ], 500);
+        }
+    }
+
+    /**
+     * Composite payload powering the two supporting charts above the
+     * Top Contributors leaderboard table: the Contribution
+     * Concentration pie (Pareto split Top 1 / Top 2-5 / Top 6-10 /
+     * Everyone else) and the Members vs External Contributors stacked
+     * bar (current + prior period, each split into the member share
+     * vs the external share).
+     *
+     * Both shapes are returned in a single response so the frontend
+     * makes one round trip instead of two when the tab opens. Same
+     * defensive predicates as the leaderboard so the three surfaces
+     * on the same screen reconcile.
+     *
+     * 5-minute Redis cache keyed by `cwm:contributor-mix:{corp}:{period}`
+     * mirrors the personalContribution / personalWalletStats pattern;
+     * the contribution cache itself updates hourly so a 5-minute TTL
+     * is at most ~5 minutes staler than the upstream without serving
+     * wildly outdated numbers.
+     */
+    public function contributorMix(Request $request)
+    {
+        try {
+            $corporationId = $this->getCorporationId($request);
+            if (! $corporationId) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Corporation not selected.',
+                ], 400);
+            }
+
+            $period = $request->get('period');
+            if (! preg_match('/^\d{4}-\d{2}$/', (string) $period)) {
+                $period = Carbon::now()->format('Y-m');
+            }
+
+            $cacheKey = sprintf('cwm:contributor-mix:%d:%s', (int) $corporationId, $period);
+            $ttl      = 300; // 5 minutes
+            $cached   = Cache::get($cacheKey);
+            if (is_array($cached)) {
+                return response()->json($cached);
+            }
+
+            $result = app(\CorpWalletManager\Services\ContributionService::class)
+                ->getContributorMix((int) $corporationId, $period);
+
+            $payload = [
+                'success'            => true,
+                'corporation_id'     => $result['corporation_id'],
+                'period'             => $result['period'],
+                'concentration'      => $result['concentration'],
+                'member_vs_external' => $result['member_vs_external'],
+            ];
+
+            Cache::put($cacheKey, $payload, $ttl);
+
+            return response()->json($payload);
+        } catch (\Exception $e) {
+            Log::error('contributorMix failed', [
+                'error' => $e->getMessage(),
+            ]);
+            return response()->json([
+                'success'            => false,
+                'message'            => 'Failed to load contributor mix.',
+                'concentration'      => ['total' => 0.0, 'buckets' => []],
+                'member_vs_external' => null,
+            ], 500);
+        }
+    }
+
+    /**
+     * Profit Attribution by activity for the Director view's Profit
+     * Attribution tab. Returns a per-activity aggregate of the corp's
+     * contribution income for the period (ratting / mission / industry
+     * / tax_payment / donation_voluntary when MM is installed; merged
+     * 'donation' bucket otherwise), with member counts, % of total
+     * profit, average per contributing member, and trend vs the prior
+     * calendar month.
+     *
+     * Where Top Contributors answers "who contributed?", this answers
+     * "what activity types drove the income?" so directors can decide
+     * where to invest corp resources.
+     */
+    public function profitAttribution(Request $request)
+    {
+        try {
+            $corporationId = $this->getCorporationId($request);
+            if (! $corporationId) {
+                return response()->json([
+                    'success'     => false,
+                    'message'     => 'Corporation not selected.',
+                    'by_activity' => [],
+                ], 400);
+            }
+
+            $period = $request->get('period');
+            if (! preg_match('/^\d{4}-\d{2}$/', (string) $period)) {
+                $period = Carbon::now()->format('Y-m');
+            }
+
+            $result = app(\CorpWalletManager\Services\ContributionService::class)
+                ->getProfitAttribution((int) $corporationId, $period);
+
+            return response()->json([
+                'success'                  => true,
+                'corporation_id'           => $result['corporation_id'],
+                'period'                   => $result['period'],
+                'mm_available'             => $result['mm_available'],
+                'total_contribution'       => $result['total_contribution'],
+                'prior_total_contribution' => $result['prior_total_contribution'],
+                'by_activity'              => $result['by_activity'],
+            ]);
+        } catch (\Exception $e) {
+            Log::error('profitAttribution failed', [
+                'error' => $e->getMessage(),
+            ]);
+            return response()->json([
+                'success'     => false,
+                'message'     => 'Failed to load profit attribution.',
+                'by_activity' => [],
+            ], 500);
+        }
+    }
+
+    /**
+     * Trailing-N-months profit attribution stacked-bar trend for the
+     * Director view's Profit Attribution tab. Mirrors the
+     * single-period profitAttribution endpoint shape philosophy so
+     * the two together give the operator a hybrid (snapshot +
+     * historical context) view. See
+     * ContributionService::getProfitAttributionTrend for the data
+     * model and MM-conditional bucket shape.
+     */
+    public function profitAttributionTrend(Request $request)
+    {
+        try {
+            $corporationId = $this->getCorporationId($request);
+            if (! $corporationId) {
+                return response()->json([
+                    'success'    => false,
+                    'message'    => 'Corporation not selected.',
+                    'categories' => [],
+                ], 400);
+            }
+
+            $months = (int) $request->get('months', 12);
+            if ($months < 1 || $months > 24) {
+                $months = 12;
+            }
+
+            $result = app(\CorpWalletManager\Services\ContributionService::class)
+                ->getProfitAttributionTrend((int) $corporationId, $months);
+
+            return response()->json([
+                'success'        => true,
+                'corporation_id' => $result['corporation_id'],
+                'months'         => $result['months'],
+                'mm_available'   => $result['mm_available'],
+                'periods'        => $result['periods'],
+                'categories'     => $result['categories'],
+            ]);
+        } catch (\Exception $e) {
+            Log::error('profitAttributionTrend failed', [
+                'error' => $e->getMessage(),
+            ]);
+            return response()->json([
+                'success'    => false,
+                'message'    => 'Failed to load profit attribution trend.',
+                'categories' => [],
+            ], 500);
+        }
+    }
+
+    /**
+     * Expense Attribution by category for the Director view's
+     * Expense Attribution tab. Single-month snapshot: per-category
+     * totals, journal-row counts, % of total, and trend vs the
+     * immediately preceding calendar month.
+     *
+     * Counterpart to profitAttribution - the two together answer
+     * "where did corp ISK come from / where did it go" for the same
+     * calendar window. See ExpenseAttributionService for the
+     * taxonomy and data model.
+     */
+    public function expenseAttribution(Request $request)
+    {
+        try {
+            $corporationId = $this->getCorporationId($request);
+            if (! $corporationId) {
+                return response()->json([
+                    'success'     => false,
+                    'message'     => 'Corporation not selected.',
+                    'by_category' => [],
+                ], 400);
+            }
+
+            $period = $request->get('period');
+            if (! preg_match('/^\d{4}-\d{2}$/', (string) $period)) {
+                $period = Carbon::now()->format('Y-m');
+            }
+
+            $result = app(\CorpWalletManager\Services\ExpenseAttributionService::class)
+                ->getCurrentPeriod((int) $corporationId, $period);
+
+            return response()->json([
+                'success'             => true,
+                'corporation_id'      => $result['corporation_id'],
+                'period'              => $result['period'],
+                'total_expense'       => $result['total_expense'],
+                'prior_total_expense' => $result['prior_total_expense'],
+                'by_category'         => $result['by_category'],
+            ]);
+        } catch (\Exception $e) {
+            Log::error('expenseAttribution failed', [
+                'error' => $e->getMessage(),
+            ]);
+            return response()->json([
+                'success'     => false,
+                'message'     => 'Failed to load expense attribution.',
+                'by_category' => [],
+            ], 500);
+        }
+    }
+
+    /**
+     * Trailing-N-months expense attribution stacked-bar trend for
+     * the Director view's Expense Attribution tab. Pivots the
+     * per-period per-category aggregate so each category surfaces a
+     * flat series of N totals (oldest first). See
+     * ExpenseAttributionService::getTrend for the data model.
+     */
+    public function expenseAttributionTrend(Request $request)
+    {
+        try {
+            $corporationId = $this->getCorporationId($request);
+            if (! $corporationId) {
+                return response()->json([
+                    'success'    => false,
+                    'message'    => 'Corporation not selected.',
+                    'categories' => [],
+                ], 400);
+            }
+
+            $months = (int) $request->get('months', 12);
+            if ($months < 1 || $months > 24) {
+                $months = 12;
+            }
+
+            // 5-minute cache: the trend reads raw journals over a 12-month
+            // window which is the heaviest analytics query in the plugin.
+            // The underlying journal only refreshes hourly via SeAT's ESI
+            // sync, so a 5-minute TTL keeps repeat tab-opens instant without
+            // ever serving badly stale numbers.
+            $cacheKey = 'cwm:expense-attribution-trend:' . (int) $corporationId . ':' . $months;
+            $result = Cache::remember($cacheKey, 300, function () use ($corporationId, $months) {
+                return app(\CorpWalletManager\Services\ExpenseAttributionService::class)
+                    ->getTrend((int) $corporationId, $months);
+            });
+
+            return response()->json([
+                'success'        => true,
+                'corporation_id' => $result['corporation_id'],
+                'months'         => $result['months'],
+                'periods'        => $result['periods'],
+                'categories'     => $result['categories'],
+            ]);
+        } catch (\Exception $e) {
+            Log::error('expenseAttributionTrend failed', [
+                'error' => $e->getMessage(),
+            ]);
+            return response()->json([
+                'success'    => false,
+                'message'    => 'Failed to load expense attribution trend.',
+                'categories' => [],
+            ], 500);
+        }
+    }
+
+    /**
+     * Alliance tax reconciliation for the Director view's Alliance Tax
+     * tab. Returns a per-period view comparing expected alliance tax
+     * (calculated from per-bucket rates × corp-wide income) against
+     * actual alliance tax (sum of outgoing payments to configured
+     * recipient ids). See AllianceTaxService for the data model.
+     */
+    public function allianceTaxReconciliation(Request $request)
+    {
+        try {
+            $corporationId = $this->getCorporationId($request);
+            if (! $corporationId) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Corporation not selected.',
+                    'periods' => [],
+                ], 400);
+            }
+
+            $months = max(1, min(36, (int) $request->get('months', 6)));
+
+            $result = app(\CorpWalletManager\Services\AllianceTaxService::class)
+                ->getReconciliation((int) $corporationId, $months);
+
+            return response()->json([
+                'success'              => true,
+                'corporation_id'       => $result['corporation_id'],
+                'months'               => $result['months'],
+                'recipient_ids'        => $result['recipient_ids'],
+                'description_keywords' => $result['description_keywords'],
+                'has_recipients'       => $result['has_recipients'],
+                'has_keywords'         => $result['has_keywords'],
+                'has_match_rules'      => $result['has_match_rules'],
+                'rates'                => $result['rates'],
+                'periods'              => $result['periods'],
+            ]);
+        } catch (\Exception $e) {
+            Log::error('allianceTaxReconciliation failed', [
+                'error' => $e->getMessage(),
+            ]);
+            return response()->json([
+                'success' => false,
+                'message' => 'Failed to load alliance tax reconciliation.',
+                'periods' => [],
+            ], 500);
         }
     }
 }

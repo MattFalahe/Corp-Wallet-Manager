@@ -1,9 +1,9 @@
 <?php
 
-namespace Seat\CorpWalletManager\Console\Commands;
+namespace CorpWalletManager\Console\Commands;
 
 use Illuminate\Console\Command;
-use Seat\CorpWalletManager\Jobs\ComputeDailyPrediction;
+use CorpWalletManager\Jobs\ComputeDailyPrediction;
 
 class ComputeDailyPredictionCommand extends Command
 {

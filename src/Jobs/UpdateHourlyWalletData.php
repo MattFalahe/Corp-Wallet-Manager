@@ -1,5 +1,5 @@
 <?php
-namespace Seat\CorpWalletManager\Jobs;
+namespace CorpWalletManager\Jobs;
 
 use Illuminate\Bus\Queueable;
 use Illuminate\Contracts\Queue\ShouldQueue;
@@ -9,10 +9,11 @@ use Illuminate\Queue\SerializesModels;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
 use Carbon\Carbon;
-use Seat\CorpWalletManager\Models\MonthlyBalance;
-use Seat\CorpWalletManager\Models\DivisionBalance;
-use Seat\CorpWalletManager\Models\RecalcLog;
-use Seat\CorpWalletManager\Models\Settings;
+use CorpWalletManager\Models\MonthlyBalance;
+use CorpWalletManager\Models\DivisionBalance;
+use CorpWalletManager\Models\RecalcLog;
+use CorpWalletManager\Models\Settings;
+use CorpWalletManager\Support\JournalFilters;
 
 class UpdateHourlyWalletData implements ShouldQueue
 {
@@ -20,6 +21,11 @@ class UpdateHourlyWalletData implements ShouldQueue
 
     public $timeout = 120;
     public $tries = 3;
+
+    public function tags(): array
+    {
+        return ['corpwalletmanager', 'wallet-sync', 'hourly'];
+    }
 
     public function handle()
     {
@@ -39,11 +45,19 @@ class UpdateHourlyWalletData implements ShouldQueue
             $since = Carbon::now()->subHours(24);
             
             // Get unique months from the last 24 hours of data
-            $monthsToUpdate = DB::table('corporation_wallet_journals')
+            $monthsToUpdateQuery = DB::table('corporation_wallet_journals')
                 ->where('date', '>=', $since)
                 ->when($corporationId, function ($query) use ($corporationId) {
                     return $query->where('corporation_id', $corporationId);
-                })
+                });
+
+            if ($corporationId) {
+                $monthsToUpdateQuery = JournalFilters::excludeInternalTransfers($monthsToUpdateQuery, (int) $corporationId);
+            } else {
+                $monthsToUpdateQuery = JournalFilters::excludeInternalTransfers($monthsToUpdateQuery);
+            }
+
+            $monthsToUpdate = $monthsToUpdateQuery
                 ->selectRaw('DISTINCT DATE_FORMAT(date, "%Y-%m") as month')
                 ->pluck('month')
                 ->toArray();
@@ -63,11 +77,14 @@ class UpdateHourlyWalletData implements ShouldQueue
                         SUM(amount) as balance
                     ')
                     ->groupBy('corporation_id');
-                
+
                 if ($corporationId) {
                     $corporationQuery->where('corporation_id', $corporationId);
+                    $corporationQuery = JournalFilters::excludeInternalTransfers($corporationQuery, (int) $corporationId);
+                } else {
+                    $corporationQuery = JournalFilters::excludeInternalTransfers($corporationQuery);
                 }
-                
+
                 $corporations = $corporationQuery->get();
                 
                 foreach ($corporations as $corp) {
@@ -94,11 +111,14 @@ class UpdateHourlyWalletData implements ShouldQueue
                         SUM(amount) as balance
                     ')
                     ->groupBy('corporation_id', 'division');
-                
+
                 if ($corporationId) {
                     $divisionQuery->where('corporation_id', $corporationId);
+                    $divisionQuery = JournalFilters::excludeInternalTransfers($divisionQuery, (int) $corporationId);
+                } else {
+                    $divisionQuery = JournalFilters::excludeInternalTransfers($divisionQuery);
                 }
-                
+
                 $divisions = $divisionQuery->get();
                 
                 foreach ($divisions as $div) {

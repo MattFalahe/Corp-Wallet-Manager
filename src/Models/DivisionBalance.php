@@ -1,11 +1,11 @@
 <?php
-namespace Seat\CorpWalletManager\Models;
+namespace CorpWalletManager\Models;
 
-use Illuminate\Database\Eloquent\Model;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\DB;
+use Seat\Services\Models\ExtensibleModel;
 
-class DivisionBalance extends Model
+class DivisionBalance extends ExtensibleModel
 {
     protected $table = 'corpwalletmanager_division_balances';
     

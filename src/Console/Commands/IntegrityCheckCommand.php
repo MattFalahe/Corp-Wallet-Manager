@@ -1,17 +1,17 @@
 <?php
 
-namespace Seat\CorpWalletManager\Console\Commands;
+namespace CorpWalletManager\Console\Commands;
 
 use Illuminate\Console\Command;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Schema;
 use Carbon\Carbon;
-use Seat\CorpWalletManager\Models\MonthlyBalance;
-use Seat\CorpWalletManager\Models\DivisionBalance;
-use Seat\CorpWalletManager\Models\Prediction;
-use Seat\CorpWalletManager\Models\DivisionPrediction;
-use Seat\CorpWalletManager\Models\Settings;
-use Seat\CorpWalletManager\Models\RecalcLog;
+use CorpWalletManager\Models\MonthlyBalance;
+use CorpWalletManager\Models\DivisionBalance;
+use CorpWalletManager\Models\Prediction;
+use CorpWalletManager\Models\DivisionPrediction;
+use CorpWalletManager\Models\Settings;
+use CorpWalletManager\Models\RecalcLog;
 
 class IntegrityCheckCommand extends Command
 {

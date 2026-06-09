@@ -1,9 +1,9 @@
 <?php
 
-namespace Seat\CorpWalletManager\Console\Commands;
+namespace CorpWalletManager\Console\Commands;
 
 use Illuminate\Console\Command;
-use Seat\CorpWalletManager\Jobs\DailyAggregation;
+use CorpWalletManager\Jobs\DailyAggregation;
 
 class DailyAggregationCommand extends Command
 {

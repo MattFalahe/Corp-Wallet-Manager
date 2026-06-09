@@ -1,10 +1,10 @@
 <?php
-namespace Seat\CorpWalletManager\Models;
+namespace CorpWalletManager\Models;
 
-use Illuminate\Database\Eloquent\Model;
 use Illuminate\Support\Facades\Log;
+use Seat\Services\Models\ExtensibleModel;
 
-class Settings extends Model
+class Settings extends ExtensibleModel
 {
     protected $table = 'corpwalletmanager_settings';
     
@@ -97,6 +97,25 @@ class Settings extends Model
                 'error' => $e->getMessage()
             ]);
             return $default;
+        }
+    }
+
+    /**
+     * Get float setting value. Used by percentage / fractional settings
+     * (e.g. alliance tax rates) where integer rounding would silently
+     * eat the fractional component.
+     */
+    public static function getFloatSetting($key, $default = 0.0)
+    {
+        try {
+            $value = static::getSetting($key, $default);
+            return is_numeric($value) ? (float)$value : (float)$default;
+        } catch (\Exception $e) {
+            Log::warning('Settings: Failed to get float setting', [
+                'key' => $key,
+                'error' => $e->getMessage()
+            ]);
+            return (float)$default;
         }
     }
 }

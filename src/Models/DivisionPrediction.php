@@ -1,11 +1,11 @@
 <?php
-namespace Seat\CorpWalletManager\Models;
+namespace CorpWalletManager\Models;
 
-use Illuminate\Database\Eloquent\Model;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\DB;
+use Seat\Services\Models\ExtensibleModel;
 
-class DivisionPrediction extends Model
+class DivisionPrediction extends ExtensibleModel
 {
     protected $table = 'corpwalletmanager_division_predictions';
     

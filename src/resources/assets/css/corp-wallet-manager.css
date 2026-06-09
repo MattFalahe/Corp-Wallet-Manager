@@ -1,0 +1,2555 @@
+/* ============================================
+   Corp Wallet Manager - Complete Design System CSS
+   Version: 1.0 - canonical design system (sibling of structure-manager.css / mining-manager-dashboard.css)
+
+   This file is the CWM equivalent of the canonical Mining Manager and
+   Structure Manager design system. It provides the same canonical chrome
+   (cards, buttons, badges, alerts, tables, forms, help page chrome, etc.)
+   but namespaced for CWM:
+       --sm-*  -> --cwm-*
+       .sm-*   -> .cwm-*
+       .btn-sm-primary -> .btn-cwm-primary
+
+   Used by: ALL Corp Wallet Manager pages
+
+   IMPORTANT: All views MUST wrap content in:
+   - .corp-wallet-wrapper
+
+   This prevents SeAT CSS from overriding our styles.
+   ============================================ */
+
+/* ============================================
+   CSS Variables & Color Palette
+   ============================================ */
+:root {
+    /* Primary Colors */
+    --cwm-primary-start: #667eea;
+    --cwm-primary-end: #764ba2;
+    --cwm-dark-bg: #1a1d24;
+    --cwm-dark-card: #23262d;
+    --cwm-border: #2c3138;
+
+    /* Text Colors */
+    --cwm-text-light: #d1d1d1;
+    --cwm-text-muted: #9ca3af;
+    --cwm-text-white: #ffffff;
+
+    /* Corp-Wallet-Manager Domain Tokens (transaction-type indicators) */
+    --cwm-tx-deposit: #28a745;     /* incoming green */
+    --cwm-tx-withdrawal: #dc3545;  /* outgoing red */
+    --cwm-tx-internal: #17a2b8;    /* transfer cyan */
+
+    /* Status Colors */
+    --cwm-success: #28a745;
+    --cwm-warning: #ffc107;
+    --cwm-danger: #dc3545;
+    --cwm-info: #17a2b8;
+
+    /* Spacing */
+    --cwm-spacing-xs: 5px;
+    --cwm-spacing-sm: 10px;
+    --cwm-spacing-md: 15px;
+    --cwm-spacing-lg: 20px;
+    --cwm-spacing-xl: 30px;
+
+    /* Border Radius */
+    --cwm-radius-sm: 3px;
+    --cwm-radius-md: 5px;
+    --cwm-radius-lg: 10px;
+    --cwm-radius-xl: 15px;
+
+    /* Transitions */
+    --cwm-transition-fast: 0.15s;
+    --cwm-transition-normal: 0.3s;
+    --cwm-transition-slow: 0.5s;
+}
+
+/* ============================================
+   Base Styles
+   ============================================ */
+.corp-wallet-wrapper .corp-wallet-dashboard,
+.corp-wallet-wrapper {
+    font-family: 'Source Sans Pro', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+    color: var(--cwm-text-light);
+}
+
+.corp-wallet-wrapper a {
+    transition: all var(--cwm-transition-fast) ease;
+}
+
+.corp-wallet-wrapper a:hover {
+    text-decoration: none;
+}
+
+/* ============================================
+   Cards & Containers
+   ============================================ */
+.corp-wallet-wrapper .card-dark {
+    background-color: var(--cwm-dark-bg);
+    border: 1px solid var(--cwm-border);
+    transition: all var(--cwm-transition-normal) ease;
+}
+
+.corp-wallet-wrapper .card-dark:hover {
+    border-color: rgba(102, 126, 234, 0.3);
+}
+
+.corp-wallet-wrapper .card-dark .card-header {
+    background-color: var(--cwm-dark-card);
+    border-bottom: 1px solid var(--cwm-border);
+    color: var(--cwm-text-white);
+    padding: var(--cwm-spacing-md) var(--cwm-spacing-lg);
+}
+
+.corp-wallet-wrapper .card-dark .card-header h3,
+.corp-wallet-wrapper .card-dark .card-header h4,
+.corp-wallet-wrapper .card-dark .card-header h5 {
+    margin: 0;
+    font-weight: 600;
+}
+
+.corp-wallet-wrapper .card-dark .card-header .card-title {
+    display: flex;
+    align-items: center;
+    gap: var(--cwm-spacing-sm);
+}
+
+.corp-wallet-wrapper .card-dark .card-body {
+    color: var(--cwm-text-light);
+    padding: var(--cwm-spacing-lg);
+}
+
+.corp-wallet-wrapper .card-dark .card-footer {
+    background-color: var(--cwm-dark-card);
+    border-top: 1px solid var(--cwm-border);
+    padding: var(--cwm-spacing-md) var(--cwm-spacing-lg);
+}
+
+/* Card with gradient header */
+.corp-wallet-wrapper .card-gradient-header .card-header {
+    background: linear-gradient(135deg, var(--cwm-primary-start) 0%, var(--cwm-primary-end) 100%);
+    border: none;
+}
+
+/* Card hover effect */
+.corp-wallet-wrapper .card-hover {
+    transition: transform var(--cwm-transition-normal) ease, box-shadow var(--cwm-transition-normal) ease;
+}
+
+.corp-wallet-wrapper .card-hover:hover {
+    transform: translateY(-5px);
+    box-shadow: 0 10px 20px rgba(0, 0, 0, 0.3);
+}
+
+/* ============================================
+   Buttons
+   ============================================ */
+.corp-wallet-wrapper .btn-cwm-primary {
+    background: linear-gradient(135deg, var(--cwm-primary-start) 0%, var(--cwm-primary-end) 100%);
+    border: none;
+    color: var(--cwm-text-white);
+    transition: all var(--cwm-transition-normal) ease;
+}
+
+.corp-wallet-wrapper .btn-cwm-primary:hover {
+    background: linear-gradient(135deg, #5568d3 0%, #6a3d8f 100%);
+    color: var(--cwm-text-white);
+    transform: translateY(-2px);
+    box-shadow: 0 5px 15px rgba(102, 126, 234, 0.4);
+}
+
+.corp-wallet-wrapper .btn-cwm-primary:active {
+    transform: translateY(0);
+}
+
+.corp-wallet-wrapper .btn-cwm-secondary {
+    background-color: var(--cwm-dark-card);
+    border: 1px solid var(--cwm-border);
+    color: var(--cwm-text-light);
+}
+
+.corp-wallet-wrapper .btn-cwm-secondary:hover {
+    background-color: #2c3138;
+    border-color: rgba(102, 126, 234, 0.5);
+    color: var(--cwm-text-white);
+}
+
+/* Button with icon */
+.corp-wallet-wrapper .btn-icon {
+    display: inline-flex;
+    align-items: center;
+    gap: var(--cwm-spacing-xs);
+}
+
+/* Button loading state */
+.corp-wallet-wrapper .btn-loading {
+    position: relative;
+    pointer-events: none;
+    opacity: 0.6;
+}
+
+.corp-wallet-wrapper .btn-loading::after {
+    content: '';
+    position: absolute;
+    width: 16px;
+    height: 16px;
+    top: 50%;
+    left: 50%;
+    margin-left: -8px;
+    margin-top: -8px;
+    border: 2px solid transparent;
+    border-radius: 50%;
+    border-top-color: currentColor;
+    animation: spin 0.6s linear infinite;
+}
+
+/* ============================================
+   Badges & Labels
+   ============================================ */
+.corp-wallet-wrapper .badge-cwm {
+    padding: 4px 8px;
+    border-radius: var(--cwm-radius-sm);
+    font-weight: 600;
+    font-size: 0.75rem;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+}
+
+.corp-wallet-wrapper .badge-paid {
+    background-color: var(--cwm-success);
+    color: var(--cwm-text-white);
+}
+
+.corp-wallet-wrapper .badge-pending {
+    background-color: var(--cwm-warning);
+    color: var(--cwm-dark-bg);
+}
+
+.corp-wallet-wrapper .badge-overdue {
+    background-color: var(--cwm-danger);
+    color: var(--cwm-text-white);
+}
+
+.corp-wallet-wrapper .badge-live {
+    background-color: var(--cwm-success);
+    color: var(--cwm-text-white);
+    animation: pulse-badge 2s infinite;
+}
+
+@keyframes pulse-badge {
+    0% {
+        box-shadow: 0 0 0 0 rgba(40, 167, 69, 0.7);
+    }
+    70% {
+        box-shadow: 0 0 0 10px rgba(40, 167, 69, 0);
+    }
+    100% {
+        box-shadow: 0 0 0 0 rgba(40, 167, 69, 0);
+    }
+}
+
+/* CWM domain transaction-type badges */
+.corp-wallet-wrapper .badge-tx-deposit {
+    background-color: var(--cwm-tx-deposit);
+    color: var(--cwm-text-white);
+    font-weight: bold;
+    padding: 4px 8px;
+    border-radius: var(--cwm-radius-sm);
+}
+
+.corp-wallet-wrapper .badge-tx-withdrawal {
+    background-color: var(--cwm-tx-withdrawal);
+    color: var(--cwm-text-white);
+    font-weight: bold;
+    padding: 4px 8px;
+    border-radius: var(--cwm-radius-sm);
+}
+
+.corp-wallet-wrapper .badge-tx-internal {
+    background-color: var(--cwm-tx-internal);
+    color: var(--cwm-text-white);
+    font-weight: bold;
+    padding: 4px 8px;
+    border-radius: var(--cwm-radius-sm);
+}
+
+/* Status badges (online/offline/pending) — DARK-THEME-SAFE */
+.corp-wallet-wrapper .status-badge {
+    padding: 0.25rem 0.5rem;
+    border-radius: 0.25rem;
+    font-size: 0.875rem;
+    font-weight: 600;
+}
+
+.corp-wallet-wrapper .status-online {
+    background-color: rgba(40, 167, 69, 0.15);
+    color: #51cf66;
+    border: 1px solid rgba(40, 167, 69, 0.3);
+}
+
+.corp-wallet-wrapper .status-offline {
+    background-color: rgba(220, 53, 69, 0.15);
+    color: #ff6b6b;
+    border: 1px solid rgba(220, 53, 69, 0.3);
+}
+
+/* Bootstrap-style badge colors */
+.corp-wallet-wrapper .badge-danger {
+    background-color: #ff6b6b;
+    color: var(--cwm-text-white);
+    font-weight: bold;
+    font-size: 11px;
+    padding: 0.25rem 0.5rem;
+    border-radius: 0.25rem;
+}
+
+.corp-wallet-wrapper .badge-warning {
+    background-color: #ffd43b;
+    color: #000000;
+    font-weight: bold;
+}
+
+.corp-wallet-wrapper .badge-success {
+    background-color: #51cf66;
+    color: var(--cwm-text-white);
+    font-weight: bold;
+}
+
+.corp-wallet-wrapper .badge-info {
+    background-color: #5dade2;
+    color: var(--cwm-text-white);
+    font-weight: bold;
+}
+
+.corp-wallet-wrapper .badge-secondary {
+    background-color: #6c757d;
+    color: var(--cwm-text-white);
+    font-weight: bold;
+}
+
+/* Custom badge sizing */
+.corp-wallet-wrapper .badge-custom {
+    padding: 0.35rem 0.65rem;
+    font-size: 0.875rem;
+}
+
+/* ============================================
+   Tables
+   ============================================ */
+.corp-wallet-wrapper .table-cwm-styled {
+    background-color: transparent;
+    color: var(--cwm-text-light);
+    margin-bottom: 0;
+}
+
+.corp-wallet-wrapper .table-cwm-styled thead th {
+    border-bottom: 2px solid var(--cwm-border);
+    font-weight: 600;
+    text-transform: uppercase;
+    font-size: 0.875rem;
+    letter-spacing: 0.5px;
+    color: var(--cwm-text-white);
+    padding: var(--cwm-spacing-md);
+    white-space: nowrap;
+}
+
+.corp-wallet-wrapper .table-cwm-styled tbody td {
+    border-bottom: 1px solid var(--cwm-border);
+    padding: var(--cwm-spacing-md);
+    vertical-align: middle;
+}
+
+.corp-wallet-wrapper .table-cwm-styled tbody tr {
+    transition: background-color var(--cwm-transition-fast) ease;
+}
+
+.corp-wallet-wrapper .table-cwm-styled tbody tr:hover {
+    background-color: rgba(102, 126, 234, 0.1);
+}
+
+.corp-wallet-wrapper .table-cwm-styled tbody tr.table-highlight {
+    background-color: rgba(102, 126, 234, 0.2);
+}
+
+.corp-wallet-wrapper .table-cwm-styled tbody tr.table-highlight:hover {
+    background-color: rgba(102, 126, 234, 0.3);
+}
+
+/* Striped table */
+.corp-wallet-wrapper .table-cwm-styled.table-striped tbody tr:nth-of-type(odd) {
+    background-color: rgba(0, 0, 0, 0.05);
+}
+
+/* Compact table */
+.corp-wallet-wrapper .table-cwm-styled.table-compact thead th,
+.corp-wallet-wrapper .table-cwm-styled.table-compact tbody td {
+    padding: var(--cwm-spacing-xs) var(--cwm-spacing-sm);
+    font-size: 0.875rem;
+}
+
+/* Responsive table wrapper */
+.corp-wallet-wrapper .table-responsive-cwm-wrap {
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+}
+
+.corp-wallet-wrapper .table-responsive-cwm-wrap::-webkit-scrollbar {
+    height: 8px;
+}
+
+.corp-wallet-wrapper .table-responsive-cwm-wrap::-webkit-scrollbar-track {
+    background: var(--cwm-dark-bg);
+}
+
+.corp-wallet-wrapper .table-responsive-cwm-wrap::-webkit-scrollbar-thumb {
+    background: var(--cwm-border);
+    border-radius: 4px;
+}
+
+.corp-wallet-wrapper .table-responsive-cwm-wrap::-webkit-scrollbar-thumb:hover {
+    background: #3a3f48;
+}
+
+/* ============================================
+   Forms
+   ============================================ */
+.corp-wallet-wrapper .form-control-cwm-styled {
+    background-color: var(--cwm-dark-card);
+    border: 1px solid var(--cwm-border);
+    color: var(--cwm-text-light);
+    border-radius: var(--cwm-radius-md);
+    padding: 8px 12px;
+    transition: all var(--cwm-transition-fast) ease;
+}
+
+.corp-wallet-wrapper .form-control-cwm-styled:focus {
+    background-color: var(--cwm-dark-bg);
+    border-color: var(--cwm-primary-start);
+    color: var(--cwm-text-white);
+    box-shadow: 0 0 0 0.2rem rgba(102, 126, 234, 0.25);
+}
+
+.corp-wallet-wrapper .form-control-cwm-styled::placeholder {
+    color: var(--cwm-text-muted);
+}
+
+.corp-wallet-wrapper .form-control-cwm-styled:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+}
+
+/* Custom select */
+.corp-wallet-wrapper .custom-select-cwm-styled {
+    background-color: var(--cwm-dark-card);
+    background-image: url("data:image/svg+xml,%3csvg xmlns='http://www.w3.org/2000/svg' width='4' height='5' viewBox='0 0 4 5'%3e%3cpath fill='%23667eea' d='M2 0L0 2h4zm0 5L0 3h4z'/%3e%3c/svg%3e");
+    border: 1px solid var(--cwm-border);
+    color: var(--cwm-text-light);
+}
+
+.corp-wallet-wrapper .custom-select-cwm-styled:focus {
+    border-color: var(--cwm-primary-start);
+    box-shadow: 0 0 0 0.2rem rgba(102, 126, 234, 0.25);
+}
+
+/* Form labels */
+.corp-wallet-wrapper .form-label-cwm-styled {
+    color: var(--cwm-text-white);
+    font-weight: 600;
+    margin-bottom: var(--cwm-spacing-xs);
+}
+
+/* Input groups */
+.corp-wallet-wrapper .input-group-cwm-styled .input-group-text {
+    background-color: var(--cwm-dark-card);
+    border: 1px solid var(--cwm-border);
+    color: var(--cwm-text-muted);
+}
+
+/* ============================================
+   Alert Boxes (canonical .alert-cwm-* variants)
+   ============================================ */
+.corp-wallet-wrapper .alert-cwm-styled {
+    border-radius: var(--cwm-radius-md);
+    padding: var(--cwm-spacing-md);
+    margin-bottom: var(--cwm-spacing-lg);
+    border-left: 4px solid;
+}
+
+.corp-wallet-wrapper .alert-cwm-info {
+    background-color: rgba(23, 162, 184, 0.15);
+    border-left-color: var(--cwm-info);
+    color: var(--cwm-text-light);
+}
+
+.corp-wallet-wrapper .alert-cwm-success {
+    background-color: rgba(40, 167, 69, 0.15);
+    border-left-color: var(--cwm-success);
+    color: var(--cwm-text-light);
+}
+
+.corp-wallet-wrapper .alert-cwm-warning {
+    background-color: rgba(255, 193, 7, 0.15);
+    border-left-color: var(--cwm-warning);
+    color: var(--cwm-text-light);
+}
+
+.corp-wallet-wrapper .alert-cwm-danger {
+    background-color: rgba(220, 53, 69, 0.15);
+    border-left-color: var(--cwm-danger);
+    color: var(--cwm-text-light);
+}
+
+.corp-wallet-wrapper .alert-cwm-styled i {
+    margin-right: var(--cwm-spacing-sm);
+}
+
+/* Bootstrap-style alert boxes */
+.corp-wallet-wrapper .alert-info {
+    background: rgba(93, 173, 226, 0.1);
+    border: 1px solid rgba(93, 173, 226, 0.2);
+    border-radius: 0.5rem;
+    color: #e0e0e0;
+    padding: 1rem;
+}
+
+.corp-wallet-wrapper .alert-success {
+    background: rgba(81, 207, 102, 0.1);
+    border: 1px solid rgba(81, 207, 102, 0.2);
+    border-radius: 0.5rem;
+    color: #e0e0e0;
+    padding: 0.5rem;
+}
+
+.corp-wallet-wrapper .alert-warning {
+    background: rgba(255, 212, 59, 0.1);
+    border: 1px solid rgba(255, 212, 59, 0.2);
+    border-radius: 0.5rem;
+    color: #e0e0e0;
+    padding: 1rem;
+}
+
+.corp-wallet-wrapper .alert-danger {
+    background: rgba(255, 107, 107, 0.1);
+    border: 1px solid rgba(255, 107, 107, 0.2);
+    border-radius: 0.5rem;
+    color: #e0e0e0;
+    padding: 1rem;
+}
+
+/* ============================================
+   Progress Bars
+   ============================================ */
+.corp-wallet-wrapper .progress-cwm-styled {
+    background-color: var(--cwm-dark-card);
+    border-radius: var(--cwm-radius-lg);
+    height: 20px;
+    overflow: hidden;
+}
+
+.corp-wallet-wrapper .progress-cwm-bar {
+    background: linear-gradient(135deg, var(--cwm-primary-start) 0%, var(--cwm-primary-end) 100%);
+    height: 100%;
+    transition: width var(--cwm-transition-slow) ease;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: var(--cwm-text-white);
+    font-size: 0.75rem;
+    font-weight: 600;
+}
+
+.corp-wallet-wrapper .progress-cwm-bar.progress-success {
+    background: linear-gradient(135deg, #28a745 0%, #20c997 100%);
+}
+
+.corp-wallet-wrapper .progress-cwm-bar.progress-warning {
+    background: linear-gradient(135deg, #ffc107 0%, #ff9800 100%);
+}
+
+.corp-wallet-wrapper .progress-cwm-bar.progress-danger {
+    background: linear-gradient(135deg, #dc3545 0%, #c82333 100%);
+}
+
+/* Animated progress bar */
+.corp-wallet-wrapper .progress-cwm-bar.animated {
+    background-size: 20px 20px;
+    animation: progress-bar-stripes 1s linear infinite;
+}
+
+@keyframes progress-bar-stripes {
+    0% { background-position: 20px 0; }
+    100% { background-position: 0 0; }
+}
+
+/* Uniform progress bars — bar + percentage label to the right */
+.cwm-progress-wrap {
+    display: flex;
+    align-items: center;
+}
+.cwm-progress-wrap .progress {
+    flex: 1;
+    border-radius: 3px;
+    background-color: rgba(255, 255, 255, 0.1);
+}
+.cwm-progress-wrap .progress .progress-bar {
+    border-radius: 3px;
+}
+.cwm-progress-wrap .cwm-pct-label {
+    min-width: 45px;
+    text-align: right;
+    font-size: 0.75rem;
+    font-weight: 600;
+    color: #ccc;
+    margin-left: 8px;
+    white-space: nowrap;
+}
+
+/* Progress bars — generic overrides */
+.corp-wallet-wrapper .progress {
+    background-color: rgba(0, 0, 0, 0.3);
+    border-radius: 4px;
+    overflow: hidden;
+}
+
+.corp-wallet-wrapper .progress-bar {
+    transition: width 0.6s ease;
+    font-weight: 600;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+/* ============================================
+   Stat Cards
+   ============================================ */
+.corp-wallet-wrapper .stat-card {
+    background: var(--cwm-dark-bg);
+    border: 1px solid var(--cwm-border);
+    border-radius: var(--cwm-radius-lg);
+    padding: var(--cwm-spacing-lg);
+    transition: all var(--cwm-transition-normal) ease;
+}
+
+.corp-wallet-wrapper .stat-card:hover {
+    border-color: rgba(102, 126, 234, 0.5);
+    transform: translateY(-3px);
+    box-shadow: 0 5px 15px rgba(0, 0, 0, 0.3);
+}
+
+.corp-wallet-wrapper .stat-card-icon {
+    width: 60px;
+    height: 60px;
+    border-radius: var(--cwm-radius-lg);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 2rem;
+    margin-bottom: var(--cwm-spacing-md);
+}
+
+.corp-wallet-wrapper .stat-card-icon.gradient {
+    background: linear-gradient(135deg, var(--cwm-primary-start) 0%, var(--cwm-primary-end) 100%);
+    color: var(--cwm-text-white);
+}
+
+.corp-wallet-wrapper .stat-card-label {
+    font-size: 0.875rem;
+    color: var(--cwm-text-muted);
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    margin-bottom: var(--cwm-spacing-xs);
+}
+
+.corp-wallet-wrapper .stat-card-value {
+    font-size: 2rem;
+    font-weight: 700;
+    color: var(--cwm-text-white);
+    margin-bottom: var(--cwm-spacing-xs);
+}
+
+.corp-wallet-wrapper .stat-card-change {
+    font-size: 0.875rem;
+    display: flex;
+    align-items: center;
+    gap: var(--cwm-spacing-xs);
+}
+
+.corp-wallet-wrapper .stat-card-change.positive {
+    color: var(--cwm-success);
+}
+
+.corp-wallet-wrapper .stat-card-change.negative {
+    color: var(--cwm-danger);
+}
+
+/* Stat boxes */
+.corp-wallet-wrapper .stat-box {
+    background: var(--cwm-dark-card);
+    border: 1px solid var(--cwm-border);
+    border-radius: var(--cwm-radius-md);
+    padding: 1rem;
+    margin-bottom: 1rem;
+}
+
+/* ============================================
+   Pagination
+   ============================================ */
+.corp-wallet-wrapper .pagination-cwm-styled .page-link {
+    background-color: var(--cwm-dark-card);
+    border: 1px solid var(--cwm-border);
+    color: var(--cwm-text-light);
+    padding: 8px 12px;
+}
+
+.corp-wallet-wrapper .pagination-cwm-styled .page-link:hover {
+    background-color: rgba(102, 126, 234, 0.2);
+    border-color: var(--cwm-primary-start);
+    color: var(--cwm-text-white);
+}
+
+.corp-wallet-wrapper .pagination-cwm-styled .page-item.active .page-link {
+    background: linear-gradient(135deg, var(--cwm-primary-start) 0%, var(--cwm-primary-end) 100%);
+    border-color: var(--cwm-primary-start);
+    color: var(--cwm-text-white);
+}
+
+.corp-wallet-wrapper .pagination-cwm-styled .page-item.disabled .page-link {
+    opacity: 0.5;
+    cursor: not-allowed;
+}
+
+/* ============================================
+   Tooltips (Bootstrap Override)
+   ============================================ */
+.corp-wallet-wrapper .tooltip-cwm-styled .tooltip-inner {
+    background-color: var(--cwm-dark-card);
+    color: var(--cwm-text-white);
+    border: 1px solid var(--cwm-border);
+    padding: 8px 12px;
+    border-radius: var(--cwm-radius-md);
+}
+
+/* ============================================
+   Loading States
+   ============================================ */
+.corp-wallet-wrapper .loading-overlay {
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background-color: rgba(26, 29, 36, 0.8);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    z-index: 1000;
+    border-radius: var(--cwm-radius-lg);
+}
+
+.corp-wallet-wrapper .spinner-cwm-styled {
+    width: 40px;
+    height: 40px;
+    border: 4px solid rgba(102, 126, 234, 0.2);
+    border-top-color: var(--cwm-primary-start);
+    border-radius: 50%;
+    animation: spin 0.8s linear infinite;
+}
+
+@keyframes spin {
+    0% { transform: rotate(0deg); }
+    100% { transform: rotate(360deg); }
+}
+
+/* ============================================
+   Empty States
+   ============================================ */
+.corp-wallet-wrapper .empty-state {
+    text-align: center;
+    padding: var(--cwm-spacing-xl) var(--cwm-spacing-lg);
+    color: var(--cwm-text-muted);
+}
+
+.corp-wallet-wrapper .empty-state-icon {
+    font-size: 4rem;
+    color: rgba(102, 126, 234, 0.3);
+    margin-bottom: var(--cwm-spacing-lg);
+}
+
+.corp-wallet-wrapper .empty-state-title {
+    font-size: 1.5rem;
+    font-weight: 600;
+    color: var(--cwm-text-light);
+    margin-bottom: var(--cwm-spacing-sm);
+}
+
+.corp-wallet-wrapper .empty-state-description {
+    font-size: 1rem;
+    margin-bottom: var(--cwm-spacing-lg);
+}
+
+.corp-wallet-wrapper .empty-state i {
+    font-size: 3rem;
+    margin-bottom: 1rem;
+    opacity: 0.5;
+}
+
+/* ============================================
+   Timeline
+   ============================================ */
+.corp-wallet-wrapper .timeline-cwm-styled {
+    position: relative;
+    padding-left: 30px;
+}
+
+.corp-wallet-wrapper .timeline-cwm-styled::before {
+    content: '';
+    position: absolute;
+    left: 10px;
+    top: 0;
+    bottom: 0;
+    width: 2px;
+    background: linear-gradient(180deg, var(--cwm-primary-start) 0%, var(--cwm-primary-end) 100%);
+}
+
+.corp-wallet-wrapper .timeline-item {
+    position: relative;
+    margin-bottom: var(--cwm-spacing-lg);
+}
+
+.corp-wallet-wrapper .timeline-item::before {
+    content: '';
+    position: absolute;
+    left: -26px;
+    top: 5px;
+    width: 12px;
+    height: 12px;
+    border-radius: 50%;
+    background: linear-gradient(135deg, var(--cwm-primary-start) 0%, var(--cwm-primary-end) 100%);
+    border: 2px solid var(--cwm-dark-bg);
+}
+
+.corp-wallet-wrapper .timeline-date {
+    color: var(--cwm-text-muted);
+    font-size: 0.875rem;
+    margin-bottom: var(--cwm-spacing-xs);
+}
+
+.corp-wallet-wrapper .timeline-content {
+    background-color: var(--cwm-dark-card);
+    padding: var(--cwm-spacing-md);
+    border-radius: var(--cwm-radius-md);
+    border: 1px solid var(--cwm-border);
+}
+
+/* ============================================
+   Utilities
+   ============================================ */
+.corp-wallet-wrapper .text-gradient {
+    background: linear-gradient(135deg, var(--cwm-primary-start) 0%, var(--cwm-primary-end) 100%);
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    background-clip: text;
+}
+
+.corp-wallet-wrapper .bg-gradient-primary {
+    background: linear-gradient(135deg, var(--cwm-primary-start) 0%, var(--cwm-primary-end) 100%) !important;
+}
+
+.corp-wallet-wrapper .shadow-cwm-styled {
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.3);
+}
+
+.corp-wallet-wrapper .shadow-cwm-lg {
+    box-shadow: 0 5px 15px rgba(0, 0, 0, 0.4);
+}
+
+.corp-wallet-wrapper .border-gradient {
+    border: 2px solid;
+    border-image: linear-gradient(135deg, var(--cwm-primary-start) 0%, var(--cwm-primary-end) 100%) 1;
+}
+
+/* Character portrait */
+.corp-wallet-wrapper .character-portrait {
+    width: 32px;
+    height: 32px;
+    border-radius: 50%;
+    border: 2px solid var(--cwm-border);
+    object-fit: cover;
+    transition: all var(--cwm-transition-normal) ease;
+}
+
+.corp-wallet-wrapper .character-portrait:hover {
+    border-color: var(--cwm-primary-start);
+    transform: scale(1.1);
+}
+
+.corp-wallet-wrapper .character-portrait.large {
+    width: 64px;
+    height: 64px;
+}
+
+/* ISK value formatting */
+.corp-wallet-wrapper .isk-value {
+    font-family: 'Courier New', Courier, monospace;
+    font-weight: 600;
+}
+
+.corp-wallet-wrapper .isk-value::after {
+    content: ' ISK';
+    font-weight: normal;
+    color: var(--cwm-text-muted);
+    font-size: 0.875em;
+}
+
+/* ============================================
+   Accessibility
+   ============================================ */
+.corp-wallet-wrapper .sr-only-cwm {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    padding: 0;
+    margin: -1px;
+    overflow: hidden;
+    clip: rect(0, 0, 0, 0);
+    white-space: nowrap;
+    border: 0;
+}
+
+.corp-wallet-wrapper .focus-visible-cwm:focus {
+    outline: 2px solid var(--cwm-primary-start);
+    outline-offset: 2px;
+}
+
+/* ============================================
+   Animations
+   ============================================ */
+@keyframes fadeIn {
+    from {
+        opacity: 0;
+        transform: translateY(10px);
+    }
+    to {
+        opacity: 1;
+        transform: translateY(0);
+    }
+}
+
+.corp-wallet-wrapper .fade-in {
+    animation: fadeIn var(--cwm-transition-normal) ease;
+}
+
+@keyframes slideIn {
+    from {
+        transform: translateX(-20px);
+        opacity: 0;
+    }
+    to {
+        transform: translateX(0);
+        opacity: 1;
+    }
+}
+
+.corp-wallet-wrapper .slide-in {
+    animation: slideIn var(--cwm-transition-normal) ease;
+}
+
+/* ============================================
+   DASHBOARD-SPECIFIC STYLES
+   ============================================ */
+
+/* ============================================
+   Info Boxes
+   ============================================ */
+.corp-wallet-wrapper .info-box {
+    box-shadow: 0 0 1px rgba(0, 0, 0, 0.125), 0 1px 3px rgba(0, 0, 0, 0.2);
+    border-radius: 0.25rem;
+    display: flex;
+    margin-bottom: 1rem;
+    min-height: 80px;
+    padding: 0.5rem;
+    position: relative;
+    width: 100%;
+    transition: all 0.3s ease;
+}
+
+.corp-wallet-wrapper .info-box:hover {
+    transform: translateY(-3px);
+    box-shadow: 0 5px 15px rgba(0, 0, 0, 0.3);
+}
+
+.corp-wallet-wrapper .info-box .info-box-icon {
+    border-radius: 0.25rem;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 2rem;
+    width: 70px;
+    text-align: center;
+    flex-shrink: 0;
+}
+
+.corp-wallet-wrapper .info-box .info-box-content {
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    line-height: 1.8;
+    flex: 1;
+    padding: 0 10px;
+}
+
+.corp-wallet-wrapper .info-box .info-box-text {
+    display: block;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    font-size: 0.875rem;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    opacity: 0.9;
+    color: var(--cwm-text-white) !important;
+}
+
+.corp-wallet-wrapper .info-box .info-box-number {
+    display: block;
+    font-weight: 700;
+    font-size: 1.5rem;
+    font-family: 'Courier New', Courier, monospace;
+    color: var(--cwm-text-white) !important;
+}
+
+.corp-wallet-wrapper .info-box small {
+    color: rgba(255, 255, 255, 0.8) !important;
+}
+
+/* ============================================
+   Info Box Gradient Variants
+   ============================================ */
+.corp-wallet-wrapper .info-box.bg-gradient-primary {
+    background: linear-gradient(135deg, rgba(102, 126, 234, 0.3) 0%, rgba(118, 75, 162, 0.3) 100%) !important;
+    color: var(--cwm-text-white) !important;
+    backdrop-filter: blur(10px);
+    border: 1px solid rgba(102, 126, 234, 0.2) !important;
+}
+
+.corp-wallet-wrapper .info-box.bg-gradient-secondary {
+    background: linear-gradient(135deg, rgba(134, 143, 150, 0.3) 0%, rgba(89, 97, 100, 0.3) 100%) !important;
+    color: var(--cwm-text-white) !important;
+    backdrop-filter: blur(10px);
+    border: 1px solid rgba(134, 143, 150, 0.2) !important;
+}
+
+.corp-wallet-wrapper .info-box.bg-gradient-success {
+    background: linear-gradient(135deg, rgba(40, 167, 69, 0.3) 0%, rgba(32, 201, 151, 0.3) 100%) !important;
+    color: var(--cwm-text-white) !important;
+    backdrop-filter: blur(10px);
+    border: 1px solid rgba(40, 167, 69, 0.2) !important;
+}
+
+.corp-wallet-wrapper .info-box.bg-gradient-info {
+    background: linear-gradient(135deg, rgba(144, 223, 254, 0.3) 0%, rgba(56, 163, 204, 0.3) 100%) !important;
+    color: var(--cwm-text-white) !important;
+    backdrop-filter: blur(10px);
+    border: 1px solid rgba(144, 223, 254, 0.2) !important;
+}
+
+.corp-wallet-wrapper .info-box.bg-gradient-warning {
+    background: linear-gradient(135deg, rgba(240, 147, 251, 0.3) 0%, rgba(245, 87, 108, 0.3) 100%) !important;
+    color: var(--cwm-text-white) !important;
+    backdrop-filter: blur(10px);
+    border: 1px solid rgba(240, 147, 251, 0.2) !important;
+}
+
+.corp-wallet-wrapper .info-box.bg-gradient-danger {
+    background: linear-gradient(135deg, rgba(220, 53, 69, 0.3) 0%, rgba(153, 27, 36, 0.3) 100%) !important;
+    color: var(--cwm-text-white) !important;
+    backdrop-filter: blur(10px);
+    border: 1px solid rgba(220, 53, 69, 0.2) !important;
+}
+
+/* CWM domain-specific info-box variants (transaction types) */
+.corp-wallet-wrapper .info-box.bg-gradient-tx-deposit {
+    background: linear-gradient(135deg, rgba(40, 167, 69, 0.3) 0%, rgba(32, 201, 151, 0.3) 100%) !important;
+    color: var(--cwm-text-white) !important;
+    backdrop-filter: blur(10px);
+    border: 1px solid rgba(40, 167, 69, 0.2) !important;
+}
+
+.corp-wallet-wrapper .info-box.bg-gradient-tx-withdrawal {
+    background: linear-gradient(135deg, rgba(220, 53, 69, 0.3) 0%, rgba(200, 35, 51, 0.3) 100%) !important;
+    color: var(--cwm-text-white) !important;
+    backdrop-filter: blur(10px);
+    border: 1px solid rgba(220, 53, 69, 0.2) !important;
+}
+
+.corp-wallet-wrapper .info-box.bg-gradient-tx-internal {
+    background: linear-gradient(135deg, rgba(23, 162, 184, 0.3) 0%, rgba(0, 168, 204, 0.3) 100%) !important;
+    color: var(--cwm-text-white) !important;
+    backdrop-filter: blur(10px);
+    border: 1px solid rgba(23, 162, 184, 0.2) !important;
+}
+
+/* ============================================
+   Small Boxes
+   ============================================ */
+.corp-wallet-wrapper .small-box {
+    border-radius: 0.25rem;
+    box-shadow: 0 0 1px rgba(0, 0, 0, 0.125), 0 1px 3px rgba(0, 0, 0, 0.2);
+    display: block;
+    margin-bottom: 20px;
+    position: relative;
+    overflow: hidden;
+    transition: all 0.3s ease;
+}
+
+.corp-wallet-wrapper .small-box:hover {
+    transform: translateY(-5px);
+    box-shadow: 0 10px 25px rgba(0, 0, 0, 0.3);
+}
+
+.corp-wallet-wrapper .small-box > .inner {
+    padding: 10px;
+}
+
+.corp-wallet-wrapper .small-box > .small-box-footer {
+    background-color: rgba(0, 0, 0, 0.1);
+    color: rgba(255, 255, 255, 0.8) !important;
+    display: block;
+    padding: 3px 0;
+    position: relative;
+    text-align: center;
+    text-decoration: none;
+    z-index: 10;
+    transition: all 0.3s ease;
+}
+
+.corp-wallet-wrapper .small-box > .small-box-footer:hover {
+    background-color: rgba(0, 0, 0, 0.15);
+    color: var(--cwm-text-white) !important;
+    text-decoration: none;
+}
+
+.corp-wallet-wrapper .small-box h3 {
+    font-size: 2.2rem;
+    font-weight: 700;
+    margin: 0 0 10px;
+    padding: 0;
+    white-space: nowrap;
+    font-family: 'Courier New', Courier, monospace;
+    color: var(--cwm-text-white) !important;
+}
+
+.corp-wallet-wrapper .small-box p {
+    font-size: 1rem;
+    margin: 0;
+    color: rgba(255, 255, 255, 0.9) !important;
+}
+
+.corp-wallet-wrapper .small-box p > small {
+    color: rgba(255, 255, 255, 0.8) !important;
+    display: block;
+    font-size: 0.9rem;
+    margin-top: 5px;
+    opacity: 0.9;
+}
+
+.corp-wallet-wrapper .small-box .icon {
+    color: rgba(0, 0, 0, 0.15);
+    z-index: 0;
+}
+
+.corp-wallet-wrapper .small-box .icon > i {
+    font-size: 70px;
+    position: absolute;
+    right: 15px;
+    top: 15px;
+    transition: all 0.3s linear;
+}
+
+.corp-wallet-wrapper .small-box:hover .icon > i {
+    font-size: 95px;
+    opacity: 0.8;
+}
+
+/* ============================================
+   Dashboard Tables
+   ============================================ */
+.corp-wallet-wrapper .table-dark {
+    background-color: var(--cwm-dark-bg);
+    color: var(--cwm-text-light);
+    margin-bottom: 0;
+}
+
+.corp-wallet-wrapper .table-dark thead th {
+    border-bottom: 2px solid var(--cwm-border);
+    font-weight: 600;
+    text-transform: uppercase;
+    font-size: 0.875rem;
+    letter-spacing: 0.5px;
+    color: var(--cwm-text-white);
+    padding: 12px 15px;
+    vertical-align: middle;
+}
+
+.corp-wallet-wrapper .table-dark tbody td {
+    border-bottom: 1px solid var(--cwm-border);
+    padding: 12px 15px;
+    vertical-align: middle;
+}
+
+.corp-wallet-wrapper .table-dark tbody tr {
+    transition: background-color 0.15s ease;
+}
+
+.corp-wallet-wrapper .table-dark tbody tr:hover {
+    background-color: var(--cwm-dark-card);
+}
+
+.corp-wallet-wrapper .table-dark.table-striped tbody tr:nth-of-type(odd) {
+    background-color: #1e2127;
+}
+
+/* Highlighted row (current user) */
+.corp-wallet-wrapper .table-primary {
+    background-color: rgba(0, 123, 255, 0.2) !important;
+}
+
+.corp-wallet-wrapper .table-primary:hover {
+    background-color: rgba(0, 123, 255, 0.3) !important;
+}
+
+/* Table with compact spacing */
+.corp-wallet-wrapper .table-dark.table-compact thead th,
+.corp-wallet-wrapper .table-dark.table-compact tbody td {
+    padding: 8px 12px;
+}
+
+/* List group items */
+.corp-wallet-wrapper .list-group-item {
+    transition: background-color 0.2s ease;
+}
+
+.corp-wallet-wrapper .list-group-item:hover {
+    background-color: rgba(102, 126, 234, 0.05);
+}
+
+/* ============================================
+   Bronze / Silver / Gold Badges
+   ============================================ */
+.corp-wallet-wrapper .badge-bronze {
+    background-color: #cd7f32;
+    color: var(--cwm-text-white);
+    font-weight: 600;
+    padding: 4px 8px;
+    border-radius: 3px;
+}
+
+.corp-wallet-wrapper .badge-silver {
+    background-color: #c0c0c0;
+    color: #333333;
+    font-weight: 600;
+    padding: 4px 8px;
+    border-radius: 3px;
+}
+
+.corp-wallet-wrapper .badge-gold {
+    background-color: #ffd700;
+    color: #333333;
+    font-weight: 600;
+    padding: 4px 8px;
+    border-radius: 3px;
+}
+
+/* ============================================
+   Chart Containers
+   ============================================ */
+.corp-wallet-wrapper .chart-container {
+    position: relative;
+    width: 100%;
+    min-height: 300px;
+}
+
+.corp-wallet-wrapper .chart-container canvas {
+    max-height: 100%;
+    width: 100% !important;
+    height: auto !important;
+}
+
+/* Loading state for charts */
+.corp-wallet-wrapper .chart-container.loading {
+    opacity: 0.5;
+    pointer-events: none;
+    min-height: 300px;
+}
+
+.corp-wallet-wrapper .chart-container.loading::after {
+    content: '';
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    width: 40px;
+    height: 40px;
+    margin: -20px 0 0 -20px;
+    border: 4px solid rgba(102, 126, 234, 0.2);
+    border-top: 4px solid var(--cwm-primary-start);
+    border-radius: 50%;
+    animation: spin-chart 1s linear infinite;
+}
+
+@keyframes spin-chart {
+    0% { transform: rotate(0deg); }
+    100% { transform: rotate(360deg); }
+}
+
+/* Chart legend styling */
+.corp-wallet-wrapper .chart-legend {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 15px;
+    margin-top: 20px;
+    padding-top: 15px;
+    border-top: 1px solid var(--cwm-border);
+}
+
+.corp-wallet-wrapper .chart-legend-item {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    font-size: 0.875rem;
+}
+
+.corp-wallet-wrapper .chart-legend-color {
+    width: 16px;
+    height: 16px;
+    border-radius: 3px;
+}
+
+/* Chart canvas size cap */
+.corp-wallet-wrapper canvas {
+    max-height: 400px;
+}
+
+/* ============================================
+   Card Tools
+   ============================================ */
+.corp-wallet-wrapper .card-tools {
+    display: flex;
+    gap: 5px;
+    align-items: center;
+}
+
+.corp-wallet-wrapper .card-tools .btn-tool {
+    color: #adb5bd;
+    background: transparent;
+    border: none;
+    padding: 0.25rem 0.5rem;
+    transition: color 0.15s ease;
+    cursor: pointer;
+}
+
+.corp-wallet-wrapper .card-tools .btn-tool:hover {
+    color: var(--cwm-text-white);
+}
+
+.corp-wallet-wrapper .card-tools .btn-tool:focus {
+    outline: none;
+    box-shadow: none;
+}
+
+/* ============================================
+   Image Styling
+   ============================================ */
+.corp-wallet-wrapper .img-circle {
+    border-radius: 50%;
+    border: 2px solid var(--cwm-border);
+    transition: border-color 0.3s ease;
+}
+
+.corp-wallet-wrapper .img-circle:hover {
+    border-color: rgba(102, 126, 234, 0.5);
+}
+
+/* ============================================
+   Dashboard Spacing
+   ============================================ */
+.corp-wallet-wrapper .corp-wallet-dashboard .row {
+    margin-bottom: 0;
+}
+
+.corp-wallet-wrapper .corp-wallet-dashboard .card {
+    margin-bottom: 20px;
+}
+
+.corp-wallet-wrapper .corp-wallet-dashboard .col,
+.corp-wallet-wrapper .corp-wallet-dashboard [class*="col-"] {
+    margin-bottom: 0;
+}
+
+/* ============================================
+   Scrollbar Styling
+   ============================================ */
+.corp-wallet-wrapper ::-webkit-scrollbar {
+    width: 8px;
+    height: 8px;
+}
+
+.corp-wallet-wrapper ::-webkit-scrollbar-track {
+    background: var(--cwm-dark-bg);
+    border-radius: 4px;
+}
+
+.corp-wallet-wrapper ::-webkit-scrollbar-thumb {
+    background: var(--cwm-border);
+    border-radius: 4px;
+    transition: background 0.3s ease;
+}
+
+.corp-wallet-wrapper ::-webkit-scrollbar-thumb:hover {
+    background: #3a3f48;
+}
+
+/* ============================================
+   Tooltips (canonical extended)
+   ============================================ */
+.corp-wallet-wrapper [data-toggle="tooltip"] {
+    cursor: help;
+    border-bottom: 1px dotted rgba(255, 255, 255, 0.3);
+}
+
+.corp-wallet-wrapper .tooltip-inner {
+    background-color: var(--cwm-dark-card);
+    color: var(--cwm-text-white);
+    border: 1px solid var(--cwm-border);
+    padding: 8px 12px;
+    border-radius: 5px;
+    font-size: 0.875rem;
+}
+
+.corp-wallet-wrapper .tooltip.bs-tooltip-top .arrow::before {
+    border-top-color: var(--cwm-dark-card);
+}
+
+.corp-wallet-wrapper .tooltip.bs-tooltip-bottom .arrow::before {
+    border-bottom-color: var(--cwm-dark-card);
+}
+
+.corp-wallet-wrapper .tooltip.bs-tooltip-left .arrow::before {
+    border-left-color: var(--cwm-dark-card);
+}
+
+.corp-wallet-wrapper .tooltip.bs-tooltip-right .arrow::before {
+    border-right-color: var(--cwm-dark-card);
+}
+
+/* ============================================
+   Activity Feed
+   ============================================ */
+.corp-wallet-wrapper .activity-feed {
+    list-style: none;
+    padding: 0;
+    margin: 0;
+}
+
+.corp-wallet-wrapper .activity-feed-item {
+    padding: 12px 0;
+    border-bottom: 1px solid var(--cwm-border);
+    display: flex;
+    gap: 12px;
+    transition: background-color 0.15s ease;
+}
+
+.corp-wallet-wrapper .activity-feed-item:last-child {
+    border-bottom: none;
+}
+
+.corp-wallet-wrapper .activity-feed-item:hover {
+    background-color: rgba(102, 126, 234, 0.05);
+}
+
+.corp-wallet-wrapper .activity-feed-icon {
+    width: 40px;
+    height: 40px;
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
+    background: rgba(102, 126, 234, 0.1);
+    color: var(--cwm-primary-start);
+}
+
+.corp-wallet-wrapper .activity-feed-content {
+    flex: 1;
+}
+
+.corp-wallet-wrapper .activity-feed-title {
+    font-weight: 600;
+    color: var(--cwm-text-white);
+    margin-bottom: 4px;
+}
+
+.corp-wallet-wrapper .activity-feed-time {
+    font-size: 0.875rem;
+    color: var(--cwm-text-muted);
+}
+
+/* ============================================
+   Statistics Grid
+   ============================================ */
+.corp-wallet-wrapper .dashboard-stats-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+    gap: 20px;
+    margin-bottom: 20px;
+}
+
+/* ============================================
+   Quick Actions
+   ============================================ */
+.corp-wallet-wrapper .quick-actions {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 10px;
+}
+
+.corp-wallet-wrapper .quick-action-btn {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 10px 20px;
+    background: linear-gradient(135deg, var(--cwm-primary-start) 0%, var(--cwm-primary-end) 100%);
+    color: var(--cwm-text-white);
+    border: none;
+    border-radius: 5px;
+    font-weight: 600;
+    text-decoration: none;
+    transition: all 0.3s ease;
+}
+
+.corp-wallet-wrapper .quick-action-btn:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 5px 15px rgba(102, 126, 234, 0.4);
+    color: var(--cwm-text-white);
+    text-decoration: none;
+}
+
+/* ============================================
+   Tab Navigation
+   ============================================ */
+.corp-wallet-wrapper .nav-tabs {
+    border-bottom: 2px solid #454d55;
+}
+
+.corp-wallet-wrapper .nav-tabs .nav-link {
+    color: #c2c7d0;
+    font-size: 0.95rem;
+    font-weight: 500;
+    padding: 10px 16px;
+    border: none;
+    background: transparent;
+    margin-right: 8px;
+    border-radius: 8px 8px 0 0;
+    transition: all 0.3s ease;
+}
+
+.corp-wallet-wrapper .nav-tabs .nav-link:hover {
+    color: var(--cwm-text-white);
+    background-color: rgba(255, 255, 255, 0.05);
+}
+
+.corp-wallet-wrapper .nav-tabs .nav-link.active {
+    background-color: #343a40;
+    border: 2px solid #454d55;
+    border-bottom: 2px solid #343a40;
+    color: var(--cwm-text-white) !important;
+    font-weight: 600;
+}
+
+.corp-wallet-wrapper .nav-tabs .nav-link.active i {
+    color: var(--cwm-text-white) !important;
+}
+
+.corp-wallet-wrapper .nav-tabs .nav-link.active .badge {
+    color: var(--cwm-text-white) !important;
+}
+
+.corp-wallet-wrapper .tab-content {
+    padding-top: 20px;
+}
+
+/* Tab Navigation (nav-tabs-custom for all pages) */
+.corp-wallet-wrapper .nav-tabs-custom {
+    margin-bottom: 0 !important;
+}
+
+.corp-wallet-wrapper .nav-tabs-custom > .nav-tabs {
+    border-bottom: 2px solid #454d55 !important;
+    background-color: transparent !important;
+}
+
+.corp-wallet-wrapper .nav-tabs-custom > .nav-tabs > li {
+    margin-right: 8px !important;
+    margin-bottom: -2px !important;
+    border: none !important;
+    background: none !important;
+}
+
+.corp-wallet-wrapper .nav-tabs-custom > .nav-tabs > li > a {
+    color: #c2c7d0 !important;
+    font-size: 1.1rem !important;
+    font-weight: 500 !important;
+    padding: 12px 24px !important;
+    border: none !important;
+    background: transparent !important;
+    border-radius: 8px 8px 0 0 !important;
+    transition: all 0.3s ease !important;
+    display: inline-block !important;
+}
+
+.corp-wallet-wrapper .nav-tabs-custom > .nav-tabs > li > a:hover {
+    color: var(--cwm-text-white) !important;
+    background-color: rgba(255, 255, 255, 0.05) !important;
+    text-decoration: none !important;
+    border: none !important;
+}
+
+.corp-wallet-wrapper .nav-tabs-custom > .nav-tabs > li.active > a,
+.corp-wallet-wrapper .nav-tabs-custom > .nav-tabs > li.active > a:hover,
+.corp-wallet-wrapper .nav-tabs-custom > .nav-tabs > li.active > a:focus {
+    background-color: #343a40 !important;
+    border: 2px solid #454d55 !important;
+    border-bottom: 2px solid #343a40 !important;
+    color: var(--cwm-text-white) !important;
+    font-weight: 600 !important;
+}
+
+.corp-wallet-wrapper .nav-tabs-custom > .nav-tabs > li.active > a > i {
+    color: var(--cwm-text-white) !important;
+}
+
+.corp-wallet-wrapper .nav-tabs-custom > .nav-tabs > li.active > a > .badge {
+    color: var(--cwm-text-white) !important;
+}
+
+.corp-wallet-wrapper .nav-tabs-custom .tab-content {
+    padding-top: 20px !important;
+    background-color: transparent !important;
+}
+
+/* ============================================
+   Tab Content & Background Enhancement (ULTRA-SPECIFIC)
+   ============================================ */
+
+/* Make tab-content background much darker */
+div.corp-wallet-wrapper div.tab-content {
+    background-color: #0f1115 !important;
+    padding: 20px !important;
+    border-radius: 5px !important;
+}
+
+/* Card backgrounds — ULTRA SPECIFIC */
+div.corp-wallet-wrapper div.card.card-dark,
+div.corp-wallet-wrapper div.card.card-dark.card-tabs {
+    background-color: #161922 !important;
+    border: 1px solid var(--cwm-border) !important;
+}
+
+/* Card headers — ULTRA SPECIFIC */
+div.corp-wallet-wrapper div.card.card-dark div.card-header,
+div.corp-wallet-wrapper div.card.card-dark.card-tabs div.card-header {
+    background-color: var(--cwm-dark-bg) !important;
+    border-bottom: 1px solid var(--cwm-border) !important;
+    color: var(--cwm-text-white) !important;
+}
+
+/* Card body — ULTRA SPECIFIC */
+div.corp-wallet-wrapper div.card-body,
+div.corp-wallet-wrapper div.card.card-dark div.card-body,
+div.corp-wallet-wrapper div.card.card-dark.card-tabs div.card-body {
+    background-color: #161922 !important;
+    color: #e8e8e8 !important;
+}
+
+/* Charts more visible */
+div.corp-wallet-wrapper div.card-body canvas {
+    background-color: rgba(26, 29, 36, 0.5) !important;
+    border-radius: 5px !important;
+    padding: 10px !important;
+}
+
+/* Tables in dark background */
+div.corp-wallet-wrapper table.table {
+    color: #e8e8e8 !important;
+    background-color: transparent !important;
+}
+
+div.corp-wallet-wrapper table.table thead th {
+    color: var(--cwm-text-white) !important;
+    background-color: var(--cwm-dark-bg) !important;
+    border-color: var(--cwm-border) !important;
+}
+
+div.corp-wallet-wrapper table.table tbody tr {
+    background-color: transparent !important;
+}
+
+div.corp-wallet-wrapper table.table-striped tbody tr:nth-of-type(odd) {
+    background-color: rgba(255, 255, 255, 0.02) !important;
+}
+
+div.corp-wallet-wrapper table.table td {
+    border-color: var(--cwm-border) !important;
+    color: #e8e8e8 !important;
+}
+
+/* Muted text */
+div.corp-wallet-wrapper .text-muted {
+    color: var(--cwm-text-muted) !important;
+}
+
+/* Tab panes darker background */
+div.corp-wallet-wrapper div.tab-pane {
+    background-color: transparent !important;
+}
+
+/* ============================================
+   Personal & Corporation Badges
+   ============================================ */
+.corp-wallet-wrapper .personal-badge {
+    background: linear-gradient(to right, var(--cwm-primary-start) 0%, var(--cwm-primary-end) 100%);
+    padding: 4px 12px;
+    font-size: 0.85rem;
+    font-weight: 600;
+}
+
+.corp-wallet-wrapper .corporation-badge {
+    background: linear-gradient(to right, #f093fb 0%, #f5576c 100%);
+    padding: 4px 12px;
+    font-size: 0.85rem;
+    font-weight: 600;
+}
+
+/* ============================================
+   Status text colors (preserved)
+   ============================================ */
+.corp-wallet-wrapper .text-success {
+    color: #51cf66 !important;
+}
+
+.corp-wallet-wrapper .text-warning {
+    color: #ffd43b !important;
+}
+
+.corp-wallet-wrapper .text-danger {
+    color: #ff6b6b !important;
+}
+
+.corp-wallet-wrapper .text-info {
+    color: #5dade2 !important;
+}
+
+.corp-wallet-wrapper .text-muted {
+    color: #a0a0a0 !important;
+}
+
+/* Bright text colors for high readability */
+.corp-wallet-wrapper .text-success-bright {
+    color: #51cf66 !important;
+}
+
+.corp-wallet-wrapper .text-warning-bright {
+    color: #ffd43b !important;
+}
+
+.corp-wallet-wrapper .text-danger-bright {
+    color: #ff6b6b !important;
+}
+
+.corp-wallet-wrapper .text-info-bright {
+    color: #5dade2 !important;
+}
+
+/* Definition lists */
+.corp-wallet-wrapper dl.row {
+    margin-bottom: 0.5rem;
+}
+
+.corp-wallet-wrapper dt {
+    font-weight: 600;
+    color: #a0a0a0;
+}
+
+.corp-wallet-wrapper dd {
+    color: #e0e0e0;
+    margin-bottom: 0.5rem;
+}
+
+/* Card / card-header / card-body / card-title (Bootstrap-style fallback) */
+.corp-wallet-wrapper .card {
+    background: rgba(0, 0, 0, 0.2);
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    border-radius: var(--cwm-radius-md);
+    margin-bottom: 1rem;
+}
+
+.corp-wallet-wrapper .card-header {
+    background: rgba(0, 0, 0, 0.3);
+    border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+    padding: 1rem;
+    border-radius: 0.5rem 0.5rem 0 0;
+}
+
+.corp-wallet-wrapper .card-body {
+    padding: 1.5rem;
+    color: #e0e0e0;
+}
+
+.corp-wallet-wrapper .card-title {
+    color: #e0e0e0;
+    font-size: 1.25rem;
+    font-weight: 600;
+    margin: 0;
+}
+
+/* Borders and rounded utility classes */
+.corp-wallet-wrapper .border {
+    border: 1px solid rgba(255, 255, 255, 0.1) !important;
+}
+
+.corp-wallet-wrapper .rounded {
+    border-radius: 0.5rem !important;
+}
+
+/* Small text */
+.corp-wallet-wrapper small {
+    font-size: 0.875rem;
+    color: #a0a0a0;
+}
+
+/* ============================================
+   No-Print + Margin/Padding Utilities
+   ============================================ */
+.corp-wallet-wrapper .no-print {
+    /* Inherits from Bootstrap but ensures it's scoped */
+}
+
+@media print {
+    .corp-wallet-wrapper .no-print {
+        display: none !important;
+    }
+}
+
+.corp-wallet-wrapper .mb-0 { margin-bottom: 0 !important; }
+.corp-wallet-wrapper .mb-1 { margin-bottom: 0.25rem !important; }
+.corp-wallet-wrapper .mb-2 { margin-bottom: 0.5rem !important; }
+.corp-wallet-wrapper .mb-3 { margin-bottom: 1rem !important; }
+.corp-wallet-wrapper .mt-1 { margin-top: 0.25rem !important; }
+.corp-wallet-wrapper .mt-2 { margin-top: 0.5rem !important; }
+.corp-wallet-wrapper .mt-3 { margin-top: 1rem !important; }
+.corp-wallet-wrapper .p-3 { padding: 1rem !important; }
+
+/* D-flex utilities */
+.corp-wallet-wrapper .d-flex {
+    display: flex !important;
+}
+
+.corp-wallet-wrapper .justify-content-between {
+    justify-content: space-between !important;
+}
+
+.corp-wallet-wrapper .align-items-center {
+    align-items: center !important;
+}
+
+.corp-wallet-wrapper .text-center {
+    text-align: center !important;
+}
+
+/* Row and column spacing */
+.corp-wallet-wrapper .row {
+    margin-left: -0.5rem;
+    margin-right: -0.5rem;
+}
+
+.corp-wallet-wrapper [class*="col-"] {
+    padding-left: 0.5rem;
+    padding-right: 0.5rem;
+}
+
+/* ============================================
+   HELP PAGE STYLES
+   (mirrors MM/SM help-page convention)
+   ============================================ */
+
+.help-wrapper {
+    display: flex;
+    gap: 20px;
+}
+
+.help-sidebar {
+    flex: 0 0 280px;
+    position: sticky;
+    top: 20px;
+    max-height: calc(100vh - 120px);
+    overflow-y: auto;
+}
+
+.help-content {
+    flex: 1;
+    min-width: 0;
+    color: var(--cwm-text-light) !important;
+}
+
+.help-nav .nav-link {
+    color: #e2e8f0 !important;
+    border-radius: 5px;
+    margin-bottom: 5px;
+    padding: 10px 15px;
+    transition: all 0.3s;
+    font-size: 0.95rem;
+}
+
+.help-nav .nav-link:hover {
+    background: rgba(102, 126, 234, 0.2);
+}
+
+.help-nav .nav-link.active {
+    background: linear-gradient(135deg, var(--cwm-primary-start) 0%, var(--cwm-primary-end) 100%);
+}
+
+.help-nav .nav-link i {
+    width: 24px;
+    text-align: center;
+    margin-right: 10px;
+}
+
+.help-section {
+    display: none;
+    animation: fadeIn 0.3s;
+}
+
+.help-section.active {
+    display: block;
+}
+
+.help-card {
+    background: var(--cwm-dark-card);
+    border-radius: 10px;
+    padding: 25px;
+    margin-bottom: 20px;
+    border: 1px solid rgba(102, 126, 234, 0.2);
+}
+
+.help-card h3 {
+    color: var(--cwm-primary-start) !important;
+    margin-bottom: 15px;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+}
+
+.help-card h4 {
+    color: #9ca3af !important;
+    margin-top: 20px;
+    margin-bottom: 10px;
+    font-size: 1.1rem;
+}
+
+.help-card h5 {
+    color: #e2e8f0 !important;
+    margin-top: 15px;
+    margin-bottom: 8px;
+}
+
+.help-card p {
+    color: #d1d5db !important;
+    line-height: 1.6;
+}
+
+.help-card ul,
+.help-card ol {
+    color: #d1d5db !important;
+    line-height: 1.8;
+    margin-left: 20px;
+}
+
+.help-card strong {
+    color: #e2e8f0 !important;
+}
+
+.help-card li {
+    color: #d1d5db !important;
+}
+
+.help-card code {
+    background: rgba(0, 0, 0, 0.3);
+    padding: 2px 6px;
+    border-radius: 3px;
+    color: #fbbf24 !important;
+    font-size: 0.9em;
+}
+
+.help-card pre {
+    background: rgba(0, 0, 0, 0.3);
+    padding: 15px;
+    border-radius: 5px;
+    overflow-x: auto;
+    color: #d1d5db !important;
+}
+
+/* Step-by-step (gradient circle counters) */
+.step-by-step {
+    counter-reset: step-counter;
+    list-style: none;
+    padding-left: 0;
+}
+
+.step-by-step li {
+    counter-increment: step-counter;
+    margin-bottom: 20px;
+    padding-left: 50px;
+    position: relative;
+    color: #d1d5db !important;
+}
+
+.step-by-step li::before {
+    content: counter(step-counter);
+    position: absolute;
+    left: 0;
+    top: 0;
+    background: linear-gradient(135deg, var(--cwm-primary-start) 0%, var(--cwm-primary-end) 100%);
+    color: white;
+    width: 35px;
+    height: 35px;
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-weight: bold;
+    font-size: 1.1rem;
+}
+
+/* Help page callouts (info / warning / success / purple) */
+.info-box,
+.warning-box,
+.success-box,
+.purple-box {
+    padding: 15px;
+    margin: 15px 0;
+    border-radius: 5px;
+    color: #d1d5db !important;
+    display: flex;
+    align-items: flex-start;
+    gap: 10px;
+    flex-wrap: wrap;
+}
+
+.info-box {
+    background: rgba(23, 162, 184, 0.15);
+    border-left: 4px solid var(--cwm-info);
+}
+
+.warning-box {
+    background: rgba(255, 193, 7, 0.15);
+    border-left: 4px solid var(--cwm-warning);
+}
+
+.success-box {
+    background: rgba(28, 200, 138, 0.15);
+    border-left: 4px solid #1cc88a;
+}
+
+/* Purple callout (generic accent) */
+.purple-box {
+    background: rgba(156, 39, 176, 0.15);
+    border-left: 4px solid #9c27b0;
+}
+
+.info-box > i,
+.warning-box > i,
+.success-box > i,
+.purple-box > i {
+    margin-top: 3px;
+    flex-shrink: 0;
+}
+
+.info-box > i { color: var(--cwm-info); }
+.warning-box > i { color: var(--cwm-warning); }
+.success-box > i { color: #1cc88a; }
+.purple-box > i { color: #9c27b0; }
+
+/* Feature grid + items */
+.feature-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+    gap: 15px;
+    margin: 20px 0;
+}
+
+.feature-item {
+    background: rgba(102, 126, 234, 0.1);
+    padding: 15px;
+    border-radius: 8px;
+    border: 1px solid rgba(102, 126, 234, 0.3);
+}
+
+.feature-item i {
+    font-size: 2rem;
+    color: var(--cwm-primary-start);
+    margin-bottom: 10px;
+}
+
+.feature-item h5 {
+    color: #e2e8f0 !important;
+    margin-bottom: 8px;
+}
+
+.feature-item p {
+    color: #9ca3af !important;
+    font-size: 0.9rem;
+    margin: 0;
+}
+
+/* Search box */
+.search-box {
+    position: relative;
+    margin-bottom: 20px;
+}
+
+.search-box input {
+    width: 100%;
+    padding: 12px 45px 12px 15px;
+    background: #2d3748;
+    border: 1px solid rgba(102, 126, 234, 0.3);
+    border-radius: 8px;
+    color: #e2e8f0 !important;
+}
+
+.search-box i {
+    position: absolute;
+    right: 15px;
+    top: 50%;
+    transform: translateY(-50%);
+    color: #9ca3af;
+}
+
+/* Quick links (gradient quick-link buttons) */
+.quick-links {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+    gap: 10px;
+    margin: 20px 0;
+}
+
+.quick-link {
+    background: linear-gradient(135deg, var(--cwm-primary-start) 0%, var(--cwm-primary-end) 100%);
+    padding: 15px;
+    border-radius: 8px;
+    text-align: center;
+    color: white;
+    text-decoration: none;
+    transition: transform 0.2s;
+}
+
+.quick-link:hover {
+    transform: translateY(-2px);
+    color: white;
+    text-decoration: none;
+}
+
+.quick-link i {
+    font-size: 2rem;
+    display: block;
+    margin-bottom: 8px;
+}
+
+/* FAQ accordion */
+.faq-item {
+    background: rgba(0, 0, 0, 0.2);
+    border-radius: 8px;
+    margin-bottom: 10px;
+    overflow: hidden;
+}
+
+.faq-question {
+    padding: 15px;
+    cursor: pointer;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    transition: background 0.2s;
+    color: #e2e8f0 !important;
+}
+
+.faq-question:hover {
+    background: rgba(102, 126, 234, 0.1);
+}
+
+.faq-question i {
+    transition: transform 0.3s;
+}
+
+.faq-item.open .faq-question i {
+    transform: rotate(180deg);
+}
+
+.faq-answer {
+    padding: 0 15px;
+    max-height: 0;
+    overflow: hidden;
+    transition: all 0.3s;
+    color: #d1d5db !important;
+}
+
+.faq-item.open .faq-answer {
+    padding: 15px;
+    max-height: 500px;
+}
+
+/* Plugin info table */
+.plugin-info-table {
+    width: 100%;
+    color: #d1d5db !important;
+}
+
+.plugin-info-table td {
+    padding: 8px 12px;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+}
+
+.plugin-info-table td:first-child {
+    color: #9ca3af !important;
+    width: 120px;
+    font-weight: 600;
+}
+
+.plugin-info-table td:last-child {
+    color: #e2e8f0 !important;
+}
+
+/* "What's new in this version" green callout */
+.whats-new-box {
+    background: linear-gradient(135deg, rgba(40, 167, 69, 0.15) 0%, rgba(32, 201, 151, 0.1) 100%);
+    border-left: 4px solid var(--cwm-success);
+    border-radius: 8px;
+    padding: 15px 20px;
+    margin: 20px 0;
+    color: #d1d5db !important;
+}
+
+.whats-new-box h4,
+.whats-new-box h5 {
+    color: #51cf66 !important;
+    margin-top: 0;
+    margin-bottom: 10px;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+/* ============================================
+   Responsive Utilities (canonical)
+   ============================================ */
+@media (max-width: 768px) {
+    .help-wrapper {
+        flex-direction: column;
+    }
+
+    .help-sidebar {
+        position: relative;
+        max-height: none;
+    }
+
+    .feature-grid {
+        grid-template-columns: 1fr;
+    }
+
+    .card-dark .card-body {
+        padding: var(--cwm-spacing-md);
+    }
+
+    .stat-card {
+        padding: var(--cwm-spacing-md);
+    }
+
+    .stat-card-value {
+        font-size: 1.5rem;
+    }
+
+    .table-cwm-styled thead th,
+    .corp-wallet-wrapper .table-cwm-styled tbody td {
+        padding: var(--cwm-spacing-sm);
+        font-size: 0.875rem;
+    }
+
+    .btn-cwm-primary,
+    .btn-cwm-secondary {
+        width: 100%;
+        margin-bottom: var(--cwm-spacing-sm);
+    }
+
+    .corp-wallet-wrapper .card-body {
+        padding: 1rem;
+    }
+
+    .corp-wallet-wrapper dl.row dt,
+    .corp-wallet-wrapper dl.row dd {
+        width: 100% !important;
+        margin-left: 0 !important;
+    }
+
+    /* Info boxes stack on mobile */
+    .info-box {
+        display: block;
+        text-align: center;
+    }
+
+    .corp-wallet-wrapper .info-box .info-box-icon {
+        width: 100%;
+        height: 80px;
+        margin-bottom: 10px;
+    }
+
+    .corp-wallet-wrapper .info-box .info-box-content {
+        text-align: center;
+        padding: 0;
+    }
+
+    /* Small box icon adjustments */
+    .small-box .icon > i {
+        font-size: 50px;
+    }
+
+    .small-box:hover .icon > i {
+        font-size: 60px;
+    }
+
+    .small-box h3 {
+        font-size: 1.5rem;
+    }
+
+    /* Dashboard grid becomes single column */
+    .dashboard-stats-grid {
+        grid-template-columns: 1fr;
+    }
+
+    /* Tables get horizontal scroll */
+    .table-responsive {
+        overflow-x: auto;
+        -webkit-overflow-scrolling: touch;
+    }
+
+    /* Charts adjust height */
+    .chart-container {
+        min-height: 250px;
+    }
+}
+
+@media (max-width: 576px) {
+    :root {
+        --cwm-spacing-lg: 15px;
+        --cwm-spacing-xl: 20px;
+    }
+
+    .stat-card-icon {
+        width: 50px;
+        height: 50px;
+        font-size: 1.5rem;
+    }
+
+    .info-box .info-box-number {
+        font-size: 1.25rem;
+    }
+
+    .info-box .info-box-text {
+        font-size: 0.75rem;
+    }
+
+    .small-box h3 {
+        font-size: 1.25rem;
+    }
+
+    .small-box p {
+        font-size: 0.875rem;
+    }
+
+    .quick-actions {
+        flex-direction: column;
+    }
+
+    .quick-action-btn {
+        width: 100%;
+        justify-content: center;
+    }
+}
+
+/* ============================================
+   Print Styles
+   ============================================ */
+@media print {
+    .btn,
+    .card-tools,
+    .pagination-cwm-styled,
+    .quick-actions,
+    .small-box-footer {
+        display: none !important;
+    }
+
+    .card-dark {
+        break-inside: avoid;
+        page-break-inside: avoid;
+    }
+
+    .table-cwm-styled,
+    .table-dark {
+        font-size: 0.875rem;
+    }
+
+    .info-box,
+    .small-box {
+        break-inside: avoid;
+        page-break-inside: avoid;
+        box-shadow: none;
+        border: 1px solid #000;
+    }
+
+    .chart-container {
+        break-inside: avoid;
+        page-break-inside: avoid;
+    }
+}
+
+/* ============================================
+   Reduced motion
+   ============================================ */
+@media (prefers-reduced-motion: reduce) {
+    .corp-wallet-wrapper *,
+    .info-box,
+    .small-box,
+    .corp-wallet-wrapper .chart-container.loading::after {
+        animation-duration: 0.01ms !important;
+        animation-iteration-count: 1 !important;
+        transition-duration: 0.01ms !important;
+    }
+}
+
+/* ============================================
+   v3 Markers + What's-New Callout
+   ============================================ */
+
+.v3-badge,
+.v3-badge-inline {
+    display: inline-block;
+    background: linear-gradient(135deg, #28a745 0%, #20c997 100%);
+    color: var(--cwm-text-white);
+    font-size: 0.7rem;
+    font-weight: 700;
+    padding: 2px 8px;
+    border-radius: 10px;
+    margin-left: 8px;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    vertical-align: middle;
+}
+
+.v3-badge-nav {
+    display: inline-block;
+    background: linear-gradient(135deg, #28a745 0%, #20c997 100%);
+    color: var(--cwm-text-white);
+    font-size: 0.65rem;
+    font-weight: 700;
+    padding: 1px 6px;
+    border-radius: 8px;
+    margin-left: auto;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+}
+
+.whats-new-box {
+    background: linear-gradient(135deg, rgba(40, 167, 69, 0.15) 0%, rgba(32, 201, 151, 0.1) 100%);
+    border-left: 4px solid var(--cwm-success);
+    border-radius: 8px;
+    padding: 15px 20px;
+    margin: 20px 0;
+    color: #d1d5db !important;
+}
+
+.whats-new-box h4,
+.whats-new-box h5 {
+    color: #51cf66 !important;
+    margin-top: 0;
+    margin-bottom: 10px;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.whats-new-box ul {
+    margin-bottom: 0;
+}
+
+.whats-new-box code {
+    background: rgba(255, 255, 255, 0.08);
+    padding: 1px 6px;
+    border-radius: 3px;
+    font-size: 0.85em;
+    color: #51cf66;
+}
+
+/* ============================================
+   My Contribution headline column
+
+   Gives the left column of the member-view "My Contribution" card a
+   subtle background tint plus a left-edge accent so the eye reads it
+   as the primary surface. Matches the canonical info-box gradient
+   pattern. The right column keeps the default card-body background.
+   ============================================ */
+.personal-headline-col {
+    position: relative;
+    padding-left: 18px;
+}
+
+.personal-headline-col::before {
+    content: '';
+    position: absolute;
+    left: 0;
+    top: 0;
+    bottom: 0;
+    width: 4px;
+    background: linear-gradient(180deg, var(--cwm-primary-start) 0%, var(--cwm-primary-end) 100%);
+    border-radius: 2px;
+}
+
+.personal-headline {
+    background: linear-gradient(135deg, rgba(102, 126, 234, 0.06) 0%, rgba(118, 75, 162, 0.04) 100%);
+    border-radius: 8px;
+    padding: 14px 16px;
+    margin-bottom: 10px;
+}
+
+.personal-headline .personal-total {
+    font-weight: 700;
+    color: var(--cwm-text-white);
+    line-height: 1.1;
+}
+
+.personal-headline #personal-main-name {
+    color: var(--cwm-text-white);
+    font-weight: 600;
+}
+
+.personal-headline-meta .badge {
+    font-size: 0.78em;
+}
+
+/* Bump the period selector compact so it nests cleanly in card-tools */
+#personal-period-select {
+    min-width: 130px;
+    background-color: rgba(255, 255, 255, 0.06);
+    color: var(--cwm-text-light);
+    border-color: var(--cwm-border);
+}
+
+/* ============================================
+   End of Corp Wallet Manager design system
+   ============================================ */

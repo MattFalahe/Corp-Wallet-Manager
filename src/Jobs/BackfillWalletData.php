@@ -1,5 +1,5 @@
 <?php
-namespace Seat\CorpWalletManager\Jobs;
+namespace CorpWalletManager\Jobs;
 
 use Illuminate\Bus\Queueable;
 use Illuminate\Contracts\Queue\ShouldQueue;
@@ -10,9 +10,10 @@ use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Schema;
 use Illuminate\Support\Facades\Log;
 use Carbon\Carbon;
-use Seat\CorpWalletManager\Models\MonthlyBalance;
-use Seat\CorpWalletManager\Models\Prediction;
-use Seat\CorpWalletManager\Models\RecalcLog;
+use CorpWalletManager\Models\MonthlyBalance;
+use CorpWalletManager\Models\Prediction;
+use CorpWalletManager\Models\RecalcLog;
+use CorpWalletManager\Support\JournalFilters;
 
 class BackfillWalletData implements ShouldQueue
 {
@@ -28,10 +29,25 @@ class BackfillWalletData implements ShouldQueue
 
     public function __construct($corporationId = null, $monthsLimit = null, $specificYear = null, $specificMonth = null)
     {
-        $this->corporationId = $corporationId;
+        // Defensive: an empty string / 0 / non-numeric value (typical when
+        // Settings::getSetting('selected_corporation_id') returns '') would
+        // otherwise reach RecalcLog::create() and trip MySQL's BIGINT type
+        // check with "Incorrect integer value: '' for column corporation_id".
+        $this->corporationId = (is_numeric($corporationId) && (int) $corporationId > 0)
+            ? (int) $corporationId
+            : null;
         $this->monthsLimit = $monthsLimit;
         $this->specificYear = $specificYear;
         $this->specificMonth = $specificMonth;
+    }
+
+    public function tags(): array
+    {
+        return [
+            'corpwalletmanager',
+            'backfill',
+            'corp:' . ($this->corporationId ?? 'all'),
+        ];
     }
 
     public function handle()
@@ -78,6 +94,9 @@ class BackfillWalletData implements ShouldQueue
 
             if ($this->corporationId) {
                 $query->where('corporation_id', $this->corporationId);
+                $query = JournalFilters::excludeInternalTransfers($query, $this->corporationId);
+            } else {
+                $query = JournalFilters::excludeInternalTransfers($query);
             }
 
             $query->groupBy('corporation_id', 'month')
@@ -96,7 +115,12 @@ class BackfillWalletData implements ShouldQueue
                             ['balance' => $row->balance ?? 0]
                         );
                         $processed++;
-                    } catch (\Exception $e) {
+                    } catch (\Illuminate\Database\QueryException $e) {
+                        // Database-layer failure is not a per-row issue; bubble up so
+                        // the job fails and the queue retries instead of silently
+                        // logging hundreds of warnings against a broken DB.
+                        throw $e;
+                    } catch (\Throwable $e) {
                         Log::warning('BackfillWalletData: Failed to process monthly balance', [
                             'corporation_id' => $row->corporation_id,
                             'month' => $row->month,
@@ -135,7 +159,9 @@ class BackfillWalletData implements ShouldQueue
                             ['predicted_balance' => $avg]
                         );
                     }
-                } catch (\Exception $e) {
+                } catch (\Illuminate\Database\QueryException $e) {
+                    throw $e;
+                } catch (\Throwable $e) {
                     Log::warning('BackfillWalletData: Failed to create prediction', [
                         'corporation_id' => $corpId,
                         'error' => $e->getMessage()

@@ -1,5 +1,5 @@
 <?php
-namespace Seat\CorpWalletManager\Jobs;
+namespace CorpWalletManager\Jobs;
 
 use Illuminate\Bus\Queueable;
 use Illuminate\Contracts\Queue\ShouldQueue;
@@ -9,8 +9,9 @@ use Illuminate\Queue\SerializesModels;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
 use Carbon\Carbon;
-use Seat\CorpWalletManager\Models\RecalcLog;
-use Seat\CorpWalletManager\Models\Settings;
+use CorpWalletManager\Models\RecalcLog;
+use CorpWalletManager\Models\Settings;
+use CorpWalletManager\Support\JournalFilters;
 
 class DailyAggregation implements ShouldQueue
 {
@@ -18,6 +19,11 @@ class DailyAggregation implements ShouldQueue
 
     public $timeout = 300;
     public $tries = 3;
+
+    public function tags(): array
+    {
+        return ['corpwalletmanager', 'wallet-sync', 'daily'];
+    }
 
     public function handle()
     {
@@ -68,29 +74,38 @@ class DailyAggregation implements ShouldQueue
                     COUNT(*) as transaction_count
                 ')
                 ->groupBy('corporation_id', 'day');
-            
+
             if ($corporationId) {
                 $query->where('corporation_id', $corporationId);
+                $query = JournalFilters::excludeInternalTransfers($query, (int) $corporationId);
+            } else {
+                $query = JournalFilters::excludeInternalTransfers($query);
             }
-            
+
             $results = $query->get();
             $processed = 0;
             
             foreach ($results as $row) {
+                $rowCorpId = (int) $row->corporation_id;
+
                 // Get top transaction types for the day
-                $topIncome = DB::table('corporation_wallet_journals')
+                $topIncomeQuery = DB::table('corporation_wallet_journals')
                     ->where('corporation_id', $row->corporation_id)
                     ->whereDate('date', $yesterday)
-                    ->where('amount', '>', 0)
+                    ->where('amount', '>', 0);
+                $topIncomeQuery = JournalFilters::excludeInternalTransfers($topIncomeQuery, $rowCorpId);
+                $topIncome = $topIncomeQuery
                     ->selectRaw('ref_type, SUM(amount) as total')
                     ->groupBy('ref_type')
                     ->orderBy('total', 'desc')
                     ->first();
-                
-                $topExpense = DB::table('corporation_wallet_journals')
+
+                $topExpenseQuery = DB::table('corporation_wallet_journals')
                     ->where('corporation_id', $row->corporation_id)
                     ->whereDate('date', $yesterday)
-                    ->where('amount', '<', 0)
+                    ->where('amount', '<', 0);
+                $topExpenseQuery = JournalFilters::excludeInternalTransfers($topExpenseQuery, $rowCorpId);
+                $topExpense = $topExpenseQuery
                     ->selectRaw('ref_type, SUM(ABS(amount)) as total')
                     ->groupBy('ref_type')
                     ->orderBy('total', 'desc')

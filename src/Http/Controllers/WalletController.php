@@ -1,38 +1,23 @@
 <?php
-namespace Seat\CorpWalletManager\Http\Controllers;
+namespace CorpWalletManager\Http\Controllers;
 
 use Illuminate\Routing\Controller;
 use Illuminate\Http\Request;
 use Carbon\Carbon;
+use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\DB;
-use Seat\CorpWalletManager\Models\Settings;
-use Seat\CorpWalletManager\Models\Prediction;
-use Seat\CorpWalletManager\Models\MonthlyBalance;
-use Seat\CorpWalletManager\Models\DivisionBalance;
+use Illuminate\Support\Facades\Schema;
+use CorpWalletManager\Http\Controllers\Concerns\AuthorizesCorporationAccess;
+use CorpWalletManager\Models\Settings;
+use CorpWalletManager\Models\Prediction;
+use CorpWalletManager\Models\MonthlyBalance;
+use CorpWalletManager\Models\DivisionBalance;
+use CorpWalletManager\Support\JournalFilters;
 
 class WalletController extends Controller
 {
-    /**
-     * Get corporation ID from request or settings
-     */
-    private function getCorporationId(Request $request)
-    {
-        // First check if it's passed in the request
-        $corporationId = $request->get('corporation_id');
-        
-        // If not in request, check settings
-        if (!$corporationId) {
-            $corporationId = Settings::getSetting('selected_corporation_id');
-        }
-        
-        // Validate it's numeric if set
-        if ($corporationId && !is_numeric($corporationId)) {
-            return null;
-        }
-        
-        return $corporationId;
-    }
+    use AuthorizesCorporationAccess;
 
     /**
      * Get corporation info (name) by ID
@@ -84,7 +69,26 @@ class WalletController extends Controller
             return response()->json(['name' => null]);
         }
     }
-    
+
+    /**
+     * Persist the current user's chosen corporation in their session so
+     * subsequent requests in this session default to it. Rejects corps the
+     * user is not authorized to view.
+     */
+    public function setCorporation(Request $request)
+    {
+        $corpId = $request->input('corporation_id');
+        if (!is_numeric($corpId) || (int) $corpId <= 0) {
+            return response()->json(['error' => 'Invalid corporation_id'], 400);
+        }
+
+        if (!$this->setSessionCorporation((int) $corpId)) {
+            return response()->json(['error' => 'Not authorized for that corporation'], 403);
+        }
+
+        return response()->json(['corporation_id' => (int) $corpId]);
+    }
+
     // ========== VIEW METHODS ==========
     
     public function director()
@@ -110,12 +114,27 @@ class WalletController extends Controller
                 'member_show_balance' => Settings::getBooleanSetting('member_show_balance', true),
                 'member_show_performance' => Settings::getBooleanSetting('member_show_performance', true),
                 'member_data_delay' => Settings::getIntegerSetting('member_data_delay', 0),
+                // Personal contribution + leaderboard surface (v3.0.0).
+                'member_show_personal_contribution' => Settings::getBooleanSetting('member_show_personal_contribution', true),
+                'member_show_leaderboard' => Settings::getBooleanSetting('member_show_leaderboard', true),
+                'member_show_mm_compliance' => Settings::getBooleanSetting('member_show_mm_compliance', true),
+                // My Personal Wallet tab (v3.0.0 follow-up). Operator toggle
+                // for the third tab; default true. When false the tab nav
+                // and the tab pane both disappear via Blade @if.
+                'member_show_personal_wallet' => Settings::getBooleanSetting('member_show_personal_wallet', true),
+                'member_leaderboard_mode' => (string) Settings::getSetting('member_leaderboard_mode', 'isk_visible'),
+                'member_leaderboard_size' => Settings::getIntegerSetting('member_leaderboard_size', 10),
+                // Used by the conditional MM Tax Compliance card so the
+                // blade can suppress the row entirely when MM is absent
+                // (the card would otherwise render an empty shell that
+                // never resolves).
+                'mm_available' => class_exists(\MiningManager\Models\TaxCode::class),
             ];
-            
+
             return view('corpwalletmanager::member', compact('settings'));
         } catch (\Exception $e) {
             Log::error('CorpWalletManager member view error: ' . $e->getMessage());
-            
+
             // Fallback with default settings if there's an error
             $settings = [
                 'member_show_health' => true,
@@ -126,8 +145,15 @@ class WalletController extends Controller
                 'member_show_balance' => true,
                 'member_show_performance' => true,
                 'member_data_delay' => 0,
+                'member_show_personal_contribution' => true,
+                'member_show_leaderboard' => true,
+                'member_show_mm_compliance' => true,
+                'member_show_personal_wallet' => true,
+                'member_leaderboard_mode' => 'isk_visible',
+                'member_leaderboard_size' => 10,
+                'mm_available' => class_exists(\MiningManager\Models\TaxCode::class),
             ];
-            
+
             return view('corpwalletmanager::member', compact('settings'));
         }
     }
@@ -370,7 +396,7 @@ class WalletController extends Controller
                 return response()->json(['error' => 'Invalid month format'], 400);
             }
 
-            $divisions = \Seat\CorpWalletManager\Models\DivisionBalance::where('corporation_id', $corporationId)
+            $divisions = \CorpWalletManager\Models\DivisionBalance::where('corporation_id', $corporationId)
                 ->where('month', $month)
                 ->orderBy('division_id')
                 ->get();
@@ -549,11 +575,14 @@ class WalletController extends Controller
             $query = DB::table('corporation_wallet_journals')
                 ->whereDate('date', $today)
                 ->selectRaw('SUM(amount) as total_change');
-                
+
             if ($corporationId && is_numeric($corporationId)) {
                 $query->where('corporation_id', $corporationId);
+                $query = JournalFilters::excludeInternalTransfers($query, (int) $corporationId);
+            } else {
+                $query = JournalFilters::excludeInternalTransfers($query);
             }
-            
+
             $result = $query->first();
             $change = $result ? (float)$result->total_change : 0;
             
@@ -606,7 +635,7 @@ class WalletController extends Controller
                 ->keyBy('division');
             
             // Get monthly changes from our processed table
-            $monthlyChanges = \Seat\CorpWalletManager\Models\DivisionBalance::where('corporation_id', $corporationId)
+            $monthlyChanges = \CorpWalletManager\Models\DivisionBalance::where('corporation_id', $corporationId)
                 ->where('month', $currentMonth)
                 ->get()
                 ->keyBy('division_id');
@@ -729,11 +758,14 @@ class WalletController extends Controller
                 ->where('date', '>=', $startDate)
                 ->groupBy('month')
                 ->orderBy('month');
-                
+
             if ($corporationId && is_numeric($corporationId)) {
                 $query->where('corporation_id', $corporationId);
+                $query = JournalFilters::excludeInternalTransfers($query, (int) $corporationId);
+            } else {
+                $query = JournalFilters::excludeInternalTransfers($query);
             }
-            
+
             $results = $query->get();
             
             $labels = [];
@@ -789,23 +821,64 @@ class WalletController extends Controller
                     COUNT(*) as transaction_count
                 ')
                 ->where('date', '>=', $startDate);
-            
+
             // Filter by income or expense
             if ($type === 'income') {
                 $query->where('amount', '>', 0);
             } else {
                 $query->where('amount', '<', 0);
             }
-            
+
             if ($corporationId && is_numeric($corporationId)) {
                 $query->where('corporation_id', $corporationId);
+                $query = JournalFilters::excludeInternalTransfers($query, (int) $corporationId);
+            } else {
+                $query = JournalFilters::excludeInternalTransfers($query);
             }
-            
+
             $query->groupBy('ref_type')
                 ->orderBy('total_amount', 'DESC');
-            
+
             $results = $query->get();
-            
+
+            // Split out alliance tax from corporation_account_withdrawal /
+            // player_donation when match rules are configured. Otherwise
+            // the breakdown shows a fat "Corporation Account Withdrawal"
+            // wedge that's really almost entirely the monthly alliance
+            // remit, hiding the actual other-withdrawals breakdown
+            // (payroll, structure fuel buys, contracts, etc).
+            if ($type === 'expense' && $corporationId && is_numeric($corporationId)) {
+                $allianceByRef = app(\CorpWalletManager\Services\AllianceTaxService::class)
+                    ->getAllianceTaxByRefType((int) $corporationId, $startDate, Carbon::now());
+
+                if (! empty($allianceByRef)) {
+                    $allianceTotal = 0.0;
+                    $allianceCount = 0;
+
+                    $results = $results->map(function ($row) use ($allianceByRef, &$allianceTotal, &$allianceCount) {
+                        if (isset($allianceByRef[$row->ref_type])) {
+                            $share = $allianceByRef[$row->ref_type];
+                            $row->total_amount = max(0.0, (float) $row->total_amount - (float) $share['amount']);
+                            $row->transaction_count = max(0, (int) $row->transaction_count - (int) $share['count']);
+                            $allianceTotal += (float) $share['amount'];
+                            $allianceCount += (int) $share['count'];
+                        }
+                        return $row;
+                    })->filter(function ($row) {
+                        return (int) $row->transaction_count > 0;
+                    })->values();
+
+                    if ($allianceTotal > 0) {
+                        $results->push((object) [
+                            'ref_type'          => 'alliance_tax',
+                            'total_amount'      => $allianceTotal,
+                            'transaction_count' => $allianceCount,
+                        ]);
+                        $results = $results->sortByDesc('total_amount')->values();
+                    }
+                }
+            }
+
             // Format transaction types for better display
             $typeNames = $this->getTransactionTypeNames();
             
@@ -928,11 +1001,14 @@ class WalletController extends Controller
             $transactionCount = DB::table('corporation_wallet_journals')
                 ->whereMonth('date', Carbon::now()->month)
                 ->whereYear('date', Carbon::now()->year);
-            
+
             if ($corporationId) {
                 $transactionCount->where('corporation_id', $corporationId);
+                $transactionCount = JournalFilters::excludeInternalTransfers($transactionCount, (int) $corporationId);
+            } else {
+                $transactionCount = JournalFilters::excludeInternalTransfers($transactionCount);
             }
-            
+
             $transactions = $transactionCount->count();
             if ($transactions > 100) {
                 $healthScore = min(100, $healthScore + 10);
@@ -984,9 +1060,12 @@ class WalletController extends Controller
             $transactionCount = DB::table('corporation_wallet_journals')
                 ->whereMonth('date', $currentMonth->month)
                 ->whereYear('date', $currentMonth->year);
-            
+
             if ($corporationId) {
                 $transactionCount->where('corporation_id', $corporationId);
+                $transactionCount = JournalFilters::excludeInternalTransfers($transactionCount, (int) $corporationId);
+            } else {
+                $transactionCount = JournalFilters::excludeInternalTransfers($transactionCount);
             }
             $transactions = $transactionCount->count();
             
@@ -1122,9 +1201,12 @@ class WalletController extends Controller
             $monthlyTransactions = DB::table('corporation_wallet_journals')
                 ->whereMonth('date', Carbon::now()->month)
                 ->whereYear('date', Carbon::now()->year);
-            
+
             if ($corporationId) {
                 $monthlyTransactions->where('corporation_id', $corporationId);
+                $monthlyTransactions = JournalFilters::excludeInternalTransfers($monthlyTransactions, (int) $corporationId);
+            } else {
+                $monthlyTransactions = JournalFilters::excludeInternalTransfers($monthlyTransactions);
             }
             $transactionCount = $monthlyTransactions->count();
             
@@ -1155,11 +1237,14 @@ class WalletController extends Controller
                 ->selectRaw('YEARWEEK(date) as week, SUM(amount) as weekly_total')
                 ->groupBy('week')
                 ->orderBy('weekly_total', 'desc');
-            
+
             if ($corporationId) {
                 $bestWeekQuery->where('corporation_id', $corporationId);
+                $bestWeekQuery = JournalFilters::excludeInternalTransfers($bestWeekQuery, (int) $corporationId);
+            } else {
+                $bestWeekQuery = JournalFilters::excludeInternalTransfers($bestWeekQuery);
             }
-            
+
             $bestWeek = $bestWeekQuery->first();
             $currentWeek = Carbon::now()->format('YW');
             
@@ -1255,30 +1340,36 @@ class WalletController extends Controller
             $transactionQuery = DB::table('corporation_wallet_journals')
                 ->whereMonth('date', $currentMonth->month)
                 ->whereYear('date', $currentMonth->year);
-            
+
             if ($corporationId) {
                 $transactionQuery->where('corporation_id', $corporationId);
+                $transactionQuery = JournalFilters::excludeInternalTransfers($transactionQuery, (int) $corporationId);
+            } else {
+                $transactionQuery = JournalFilters::excludeInternalTransfers($transactionQuery);
             }
-            
+
             $currentTransactions = $transactionQuery->count();
-            
+
             // Last month transactions for comparison
             $lastMonth = Carbon::now()->subMonth();
             $lastMonthQuery = DB::table('corporation_wallet_journals')
                 ->whereMonth('date', $lastMonth->month)
                 ->whereYear('date', $lastMonth->year);
-            
+
             if ($corporationId) {
                 $lastMonthQuery->where('corporation_id', $corporationId);
+                $lastMonthQuery = JournalFilters::excludeInternalTransfers($lastMonthQuery, (int) $corporationId);
+            } else {
+                $lastMonthQuery = JournalFilters::excludeInternalTransfers($lastMonthQuery);
             }
-            
+
             $lastMonthTransactions = $lastMonthQuery->count();
-            
+
             // Calculate change
-            $change = $lastMonthTransactions > 0 
+            $change = $lastMonthTransactions > 0
                 ? (($currentTransactions - $lastMonthTransactions) / $lastMonthTransactions) * 100
                 : 0;
-            
+
             // Determine activity level
             $level = 'Low';
             if ($currentTransactions >= 1000) {
@@ -1290,7 +1381,7 @@ class WalletController extends Controller
             } elseif ($currentTransactions >= 100) {
                 $level = 'Low-Medium';
             }
-            
+
             return response()->json([
                 'level' => $level,
                 'transactions' => $currentTransactions,
@@ -1377,11 +1468,14 @@ class WalletController extends Controller
                 ')
                 ->groupBy('day_of_week')
                 ->orderBy('day_of_week');
-            
+
             if ($corporationId) {
                 $query->where('corporation_id', $corporationId);
+                $query = JournalFilters::excludeInternalTransfers($query, (int) $corporationId);
+            } else {
+                $query = JournalFilters::excludeInternalTransfers($query);
             }
-            
+
             $data = $query->get();
             
             // Map to day names and calculate activity percentage
@@ -1476,23 +1570,29 @@ class WalletController extends Controller
             $transactionQuery = DB::table('corporation_wallet_journals')
                 ->whereMonth('date', $currentMonth->month)
                 ->whereYear('date', $currentMonth->year);
-            
+
             if ($corporationId) {
                 $transactionQuery->where('corporation_id', $corporationId);
+                $transactionQuery = JournalFilters::excludeInternalTransfers($transactionQuery, (int) $corporationId);
+            } else {
+                $transactionQuery = JournalFilters::excludeInternalTransfers($transactionQuery);
             }
-            
+
             $currentTransactions = $transactionQuery->count();
-            
+
             // Last month transactions
             $lastMonth = Carbon::now()->subMonth();
             $lastMonthQuery = DB::table('corporation_wallet_journals')
                 ->whereMonth('date', $lastMonth->month)
                 ->whereYear('date', $lastMonth->year);
-            
+
             if ($corporationId) {
                 $lastMonthQuery->where('corporation_id', $corporationId);
+                $lastMonthQuery = JournalFilters::excludeInternalTransfers($lastMonthQuery, (int) $corporationId);
+            } else {
+                $lastMonthQuery = JournalFilters::excludeInternalTransfers($lastMonthQuery);
             }
-            
+
             $lastMonthTransactions = $lastMonthQuery->count();
             
             // Calculate activity change
@@ -1539,17 +1639,20 @@ class WalletController extends Controller
             ->where('date', '>=', $thirtyDaysAgo)
             ->selectRaw('DATE(date) as day, SUM(amount) as daily_change')
             ->groupBy('day');
-        
+
         if ($corporationId) {
             $query->where('corporation_id', $corporationId);
+            $query = JournalFilters::excludeInternalTransfers($query, (int) $corporationId);
+        } else {
+            $query = JournalFilters::excludeInternalTransfers($query);
         }
-        
+
         $dailyChanges = $query->pluck('daily_change')->toArray();
-        
+
         if (empty($dailyChanges)) {
             return 50;
         }
-        
+
         // Calculate coefficient of variation
         $mean = array_sum($dailyChanges) / count($dailyChanges);
         if ($mean == 0) {
@@ -1607,13 +1710,16 @@ class WalletController extends Controller
         $query = DB::table('corporation_wallet_journals')
             ->whereMonth('date', $currentMonth->month)
             ->whereYear('date', $currentMonth->year);
-        
+
         if ($corporationId) {
             $query->where('corporation_id', $corporationId);
+            $query = JournalFilters::excludeInternalTransfers($query, (int) $corporationId);
+        } else {
+            $query = JournalFilters::excludeInternalTransfers($query);
         }
-        
+
         $transactions = $query->count();
-        
+
         // Score based on transaction count
         // 1000+ transactions = 100 score
         $activityScore = min(100, ($transactions / 1000) * 100);
@@ -1631,13 +1737,16 @@ class WalletController extends Controller
                 SUM(CASE WHEN amount > 0 THEN amount ELSE 0 END) as income,
                 SUM(CASE WHEN amount < 0 THEN ABS(amount) ELSE 0 END) as expenses
             ');
-        
+
         if ($corporationId) {
             $query->where('corporation_id', $corporationId);
+            $query = JournalFilters::excludeInternalTransfers($query, (int) $corporationId);
+        } else {
+            $query = JournalFilters::excludeInternalTransfers($query);
         }
-        
+
         $result = $query->first();
-        
+
         if (!$result || $result->expenses == 0) {
             return 50;
         }
@@ -1668,13 +1777,16 @@ class WalletController extends Controller
             ->where('date', '>=', $thirtyDaysAgo)
             ->selectRaw('DATE(date) as day, SUM(amount) as daily_change')
             ->groupBy('day');
-        
+
         if ($corporationId) {
             $query->where('corporation_id', $corporationId);
+            $query = JournalFilters::excludeInternalTransfers($query, (int) $corporationId);
+        } else {
+            $query = JournalFilters::excludeInternalTransfers($query);
         }
-        
+
         $dailyChanges = $query->pluck('daily_change')->toArray();
-        
+
         if (count($dailyChanges) < 2) {
             return 0;
         }
@@ -1695,6 +1807,1357 @@ class WalletController extends Controller
         return abs(($stdDev / abs($mean)) * 100);
     }
     
+    /**
+     * Personal contribution for the logged-in user for the given period.
+     *
+     * Returns the viewer's monthly contribution rolled up across every
+     * character they own (alts roll into the main, alt_count exposed).
+     * Includes rank + percentile vs the corp cohort, trend vs prior
+     * period, and the per-bucket strip the sparkline renders. Applies
+     * NPC + corp-self guards on character ids.
+     *
+     * Scope rule: rolls up across ALL the user's owned characters
+     * regardless of current corp affiliation. The viewer's lifetime
+     * contribution to this corp should reflect every character that
+     * ever participated, including an old main who later moved to a
+     * different corp. The leaderboard surface (getTopContributors)
+     * has the opposite policy - it filters to current corp members
+     * only - and the difference is intentional.
+     *
+     * Income-only rule: total_amount in the response is the sum of
+     * the five positive contribution buckets (ratting + mission +
+     * industry + tax_payment + donation_voluntary). The withdrawal
+     * bucket is still surfaced under by_bucket.withdrawal as an
+     * informational field but does NOT roll into total_amount; that
+     * matches the way the corp leaderboard ranks rows so the
+     * card-vs-leaderboard reconciliation is meaningful.
+     */
+    public function personalContribution(Request $request)
+    {
+        try {
+            $corporationId = $this->getCorporationId($request);
+
+            $period = $request->get('period');
+            if (! preg_match('/^\d{4}-\d{2}$/', (string) $period)) {
+                $period = Carbon::now()->format('Y-m');
+            }
+
+            $emptyShape = [
+                'corporation_id' => $corporationId,
+                'period'         => $period,
+                'main_character' => null,
+                'alt_count'      => 0,
+                'total_amount'   => 0.0,
+                'by_bucket'      => [
+                    'ratting' => 0.0, 'mission' => 0.0, 'industry' => 0.0,
+                    'tax_payment' => 0.0, 'donation_voluntary' => 0.0, 'withdrawal' => 0.0,
+                ],
+                'rank'           => null,
+                'rank_total'     => 0,
+                'percentile'     => null,
+                'prior_total'    => null,
+                'trend_pct'      => null,
+                'months_active'  => 0,
+                'lifetime_total' => 0.0,
+            ];
+
+            if (! $corporationId) {
+                return response()->json($emptyShape);
+            }
+
+            // Aggregate across ALL the user's owned characters, regardless of
+            // which corp those characters are currently in. The corp scoping
+            // happens at the contribution-cache query below via the
+            // `WHERE corporation_id = $thisCorp` predicate paired with the
+            // `whereIn('character_id', ...)` set. This way a main who moved
+            // out of the corp still shows their lifetime contribution to it.
+            $characterIds = $this->viewerOwnedCharacterIds();
+            if (empty($characterIds)) {
+                return response()->json($emptyShape);
+            }
+
+            $userId = (int) auth()->id();
+
+            // ----- Cache layer ---------------------------------------------
+            // Per-user, per-corp, per-period key. The character-id crc32
+            // suffix invalidates the entry naturally when the viewer links
+            // a new alt or revokes one (rare, but cheap to detect). The
+            // hourly classifier cron rewrites the underlying cache table,
+            // so a 5-minute TTL keeps the surface at most ~5 minutes
+            // staler than the upstream cache without ever serving wildly
+            // outdated numbers.
+            //
+            // When `?refresh=1` is present we skip the read (the refresh
+            // button on the tab nav passes it) but still WRITE the fresh
+            // value back so the next non-refresh hit is fast again.
+            $charIdHash = crc32(implode(',', $characterIds));
+            $cacheKey   = sprintf('cwm:personal-contribution:%d:%d:%s:%u', $userId, (int) $corporationId, $period, $charIdHash);
+            $ttl        = 300; // 5 minutes
+            $refresh    = $request->boolean('refresh');
+            if (! $refresh) {
+                $cached = Cache::get($cacheKey);
+                if (is_array($cached)) {
+                    return response()->json($cached);
+                }
+            }
+
+            // Resolve the viewer's main character (defaults to the user's
+            // main_character_id when set, else the first character we have).
+            $mainCharacterId = (int) (DB::table('users')->where('id', $userId)->value('main_character_id') ?? 0);
+            if ($mainCharacterId <= 0 || ! in_array($mainCharacterId, $characterIds, true)) {
+                $mainCharacterId = (int) $characterIds[0];
+            }
+
+            $mainName = (string) (DB::table('character_infos')
+                ->where('character_id', $mainCharacterId)
+                ->value('name') ?? ('Character ' . $mainCharacterId));
+
+            $priorPeriod = $this->priorPeriod($period);
+
+            // ----- Fused aggregate query -----------------------------------
+            // Single round-trip that produces every header figure for both
+            // the headline strip (current totals + buckets + withdrawal),
+            // the trend pill (prior-period income), the lifetime block
+            // (lifetime income + months_active), all via conditional sums
+            // over a single scan of the viewer's contribution-cache rows.
+            //
+            // This replaces what used to be FOUR separate queries (current
+            // / prior / lifetime / months_active) plus a GROUP BY enumerate
+            // for the months count, which all repeated the same
+            // `WHERE corporation_id = ? AND character_id IN (...)` slice.
+            //
+            // EXPLAIN result: ref scan on
+            // `corpwalletmanager_character_contributions` using the
+            // `cwm_char_contrib_corp_period` index (corp+period composite)
+            // for the per-period buckets and `cwm_char_contrib_unique`
+            // (corp+char+period) for the lifetime slice; estimated rows
+            // = (months a viewer has been in the corp) * (alt count),
+            // typically well under a thousand even for a long-tenured
+            // 10-alt main.
+            $incomeExpr = '(COALESCE(ratting_amount,0) ' .
+                ' + COALESCE(mission_amount,0) ' .
+                ' + COALESCE(industry_amount,0) ' .
+                ' + COALESCE(tax_payment_amount,0) ' .
+                ' + COALESCE(donation_voluntary_amount,0))';
+
+            $agg = DB::table('corpwalletmanager_character_contributions')
+                ->where('corporation_id', $corporationId)
+                ->whereIn('character_id', $characterIds)
+                ->where('character_id', '>=', 90000000)
+                ->whereColumn('character_id', '!=', 'corporation_id')
+                ->selectRaw(
+                    // Current-period buckets + total (the headline strip).
+                    'COALESCE(SUM(CASE WHEN period = ? THEN COALESCE(ratting_amount,0)            ELSE 0 END), 0) AS ratting, ' .
+                    'COALESCE(SUM(CASE WHEN period = ? THEN COALESCE(mission_amount,0)            ELSE 0 END), 0) AS mission, ' .
+                    'COALESCE(SUM(CASE WHEN period = ? THEN COALESCE(industry_amount,0)           ELSE 0 END), 0) AS industry, ' .
+                    'COALESCE(SUM(CASE WHEN period = ? THEN COALESCE(tax_payment_amount,0)        ELSE 0 END), 0) AS tax_payment, ' .
+                    'COALESCE(SUM(CASE WHEN period = ? THEN COALESCE(donation_voluntary_amount,0) ELSE 0 END), 0) AS donation_voluntary, ' .
+                    'COALESCE(SUM(CASE WHEN period = ? THEN COALESCE(withdrawal_amount,0)         ELSE 0 END), 0) AS withdrawal, ' .
+                    'COALESCE(SUM(CASE WHEN period = ? THEN ' . $incomeExpr . ' ELSE 0 END), 0) AS current_total, ' .
+                    // Prior-period income total (drives the trend pill).
+                    'COALESCE(SUM(CASE WHEN period = ? THEN ' . $incomeExpr . ' ELSE 0 END), 0) AS prior_total, ' .
+                    // Lifetime + active-months stay row-grained: COUNT of
+                    // distinct periods with positive income is the
+                    // "months_active" metric, and SUM across every row is
+                    // the lifetime income (withdrawal excluded by policy).
+                    'COALESCE(SUM(' . $incomeExpr . '), 0) AS lifetime_total, ' .
+                    'COUNT(DISTINCT CASE WHEN ' . $incomeExpr . ' > 0 THEN period END) AS months_active',
+                    [$period, $period, $period, $period, $period, $period, $period, $priorPeriod]
+                )
+                ->first();
+
+            $totalAmount = (float) ($agg->current_total ?? 0);
+            $priorTotal  = (float) ($agg->prior_total ?? 0);
+            $lifetime    = (float) ($agg->lifetime_total ?? 0);
+            $monthsActive = (int) ($agg->months_active ?? 0);
+
+            // Rank vs the corp cohort (main-grouped totals). Lean SQL-only
+            // impl - we skip the full leaderboard build (name resolution +
+            // MM tax lookups for 1000 entries would dominate the request).
+            $rankInfo = $this->computeViewerRankFast((int) $corporationId, $period, $characterIds);
+
+            $trendPct = null;
+            if ($priorTotal > 0.0) {
+                $pct = (($totalAmount - $priorTotal) / $priorTotal) * 100.0;
+                $trendPct = max(-1000.0, min(1000.0, $pct));
+            }
+
+            $payload = [
+                'corporation_id' => (int) $corporationId,
+                'period'         => $period,
+                'main_character' => [
+                    'id'      => $mainCharacterId,
+                    'name'    => $mainName,
+                    'is_main' => true,
+                ],
+                'alt_count'      => max(0, count(array_unique($characterIds)) - 1),
+                'total_amount'   => $totalAmount,
+                'by_bucket'      => [
+                    'ratting'            => (float) ($agg->ratting ?? 0),
+                    'mission'            => (float) ($agg->mission ?? 0),
+                    'industry'           => (float) ($agg->industry ?? 0),
+                    'tax_payment'        => (float) ($agg->tax_payment ?? 0),
+                    'donation_voluntary' => (float) ($agg->donation_voluntary ?? 0),
+                    'withdrawal'         => (float) ($agg->withdrawal ?? 0),
+                ],
+                'rank'           => $rankInfo['rank'],
+                'rank_total'     => $rankInfo['rank_total'],
+                'percentile'     => $rankInfo['percentile'],
+                'prior_total'    => $priorTotal > 0.0 ? $priorTotal : null,
+                'trend_pct'      => $trendPct,
+                'months_active'  => $monthsActive,
+                'lifetime_total' => $lifetime,
+            ];
+
+            Cache::put($cacheKey, $payload, $ttl);
+
+            return response()->json($payload);
+        } catch (\Exception $e) {
+            Log::error('personalContribution failed', ['error' => $e->getMessage()]);
+            return response()->json([
+                'corporation_id' => null,
+                'period'         => Carbon::now()->format('Y-m'),
+                'main_character' => null,
+                'alt_count'      => 0,
+                'total_amount'   => 0.0,
+                'by_bucket'      => [
+                    'ratting' => 0.0, 'mission' => 0.0, 'industry' => 0.0,
+                    'tax_payment' => 0.0, 'donation_voluntary' => 0.0, 'withdrawal' => 0.0,
+                ],
+                'rank'           => null,
+                'rank_total'     => 0,
+                'percentile'     => null,
+                'prior_total'    => null,
+                'trend_pct'      => null,
+                'months_active'  => 0,
+                'lifetime_total' => 0.0,
+            ], 500);
+        }
+    }
+
+    /**
+     * Top contributors leaderboard with the operator-configured privacy
+     * mode applied SERVER-SIDE. Members never see hidden values via
+     * devtools because the masked fields are nulled out before the
+     * response leaves the controller.
+     *
+     * Mode handling:
+     *   - isk_visible: total_amount + pct_of_corp both kept.
+     *   - percentage:  total_amount still in the payload (the % is
+     *                  derived from it on the server); frontend renders
+     *                  only the % column. Sending both lets the viewer's
+     *                  own row's % math match for free.
+     *   - rank_only:   total_amount AND pct_of_corp NULLED OUT so the
+     *                  response carries no raw numbers at all.
+     *
+     * Always returns the viewer's own row at viewer_row when they are
+     * outside the top N (so they always see their rank). Main-character
+     * grouping mirrors the director leaderboard so a contributor's row
+     * here matches the row a director would see at the same period.
+     */
+    public function memberLeaderboard(Request $request)
+    {
+        try {
+            $corporationId = $this->getCorporationId($request);
+            $period = $request->get('period');
+            if (! preg_match('/^\d{4}-\d{2}$/', (string) $period)) {
+                $period = Carbon::now()->format('Y-m');
+            }
+
+            // Operator-configured mode + size; mode is the privacy gate.
+            $mode = (string) Settings::getSetting('member_leaderboard_mode', 'isk_visible');
+            if (! in_array($mode, ['isk_visible', 'percentage', 'rank_only'], true)) {
+                $mode = 'isk_visible';
+            }
+            $size = (int) Settings::getIntegerSetting('member_leaderboard_size', 10);
+            if (! in_array($size, [5, 10, 20], true)) {
+                $size = 10;
+            }
+
+            $emptyShape = [
+                'corporation_id' => $corporationId,
+                'period'         => $period,
+                'mode'           => $mode,
+                'size'           => $size,
+                'corp_total'     => 0.0,
+                'top'            => [],
+                'viewer_row'     => null,
+                'viewer_in_top'  => false,
+            ];
+
+            if (! $corporationId) {
+                return response()->json($emptyShape);
+            }
+
+            // Reuse the director's main-character-grouped leaderboard so
+            // both surfaces stay reconcilable. Ask for size + 1 first;
+            // if the viewer isn't in there, we top up with their row.
+            $top = app(\CorpWalletManager\Services\ContributionService::class)
+                ->getTopContributors((int) $corporationId, $period, max($size, 50));
+
+            $contributors = $top['contributors'] ?? [];
+            if (empty($contributors)) {
+                return response()->json($emptyShape);
+            }
+
+            // Compute corp total ONCE across the full main-grouped set so
+            // pct_of_corp denominators are stable regardless of trim.
+            $corpTotal = 0.0;
+            foreach ($contributors as $row) {
+                $corpTotal += (float) ($row['total_contribution_amount'] ?? 0);
+            }
+
+            // Annotate every row with rank, is_viewer, and the safe-to-display
+            // alt_count + character_name. The director service already
+            // resolved names through EntityNameResolver, so we just forward.
+            // Use the corp-agnostic owner set so a member's row is still
+            // flagged "you" even when one of their alts (or their old main)
+            // sits in the corp but they themselves are signed in elsewhere.
+            $viewerCharacterIds = $this->viewerOwnedCharacterIds();
+            $viewerMainSet = $this->mainsForViewerCharacters($viewerCharacterIds);
+
+            $annotated = [];
+            $rank = 0;
+            foreach ($contributors as $row) {
+                $rank++;
+                $total = (float) ($row['total_contribution_amount'] ?? 0);
+                $pct = $corpTotal > 0.0 ? ($total / $corpTotal) * 100.0 : 0.0;
+                $charId = (int) ($row['character_id'] ?? $row['main_character_id'] ?? 0);
+                $isViewer = $charId > 0 && in_array($charId, $viewerMainSet, true);
+
+                $annotated[] = [
+                    'rank'           => $rank,
+                    'character_id'   => $charId,
+                    'character_name' => (string) ($row['character_name'] ?? ('Character ' . $charId)),
+                    'total_amount'   => $total,
+                    'pct_of_corp'    => $pct,
+                    'alt_count'      => (int) ($row['alt_count'] ?? 0),
+                    'is_viewer'      => $isViewer,
+                ];
+            }
+
+            // Pick top N, then locate the viewer's row in the full set.
+            $topRows = array_slice($annotated, 0, $size);
+            $viewerRow = null;
+            $viewerInTop = false;
+            foreach ($topRows as $r) {
+                if ($r['is_viewer']) {
+                    $viewerInTop = true;
+                    break;
+                }
+            }
+            if (! $viewerInTop) {
+                foreach ($annotated as $r) {
+                    if ($r['is_viewer']) {
+                        $viewerRow = $r;
+                        break;
+                    }
+                }
+            }
+
+            // Apply the privacy mode SERVER-SIDE. rank_only NULLS both
+            // total_amount and pct_of_corp so a curious member opening
+            // devtools can't peek at the raw numbers we are supposed to
+            // be hiding. percentage keeps total_amount because the % is
+            // derived from it; the frontend simply doesn't render the ISK
+            // column in that mode.
+            $applyMode = static function (array &$row) use ($mode): void {
+                if ($mode === 'rank_only') {
+                    $row['total_amount'] = null;
+                    $row['pct_of_corp']  = null;
+                }
+            };
+            foreach ($topRows as &$r) {
+                $applyMode($r);
+            }
+            unset($r);
+            if ($viewerRow !== null) {
+                $applyMode($viewerRow);
+            }
+
+            return response()->json([
+                'corporation_id' => (int) $corporationId,
+                'period'         => $period,
+                'mode'           => $mode,
+                'size'           => $size,
+                'corp_total'     => $mode === 'rank_only' ? null : $corpTotal,
+                'top'            => array_values($topRows),
+                'viewer_row'     => $viewerRow,
+                'viewer_in_top'  => $viewerInTop,
+            ]);
+        } catch (\Exception $e) {
+            Log::error('memberLeaderboard failed', ['error' => $e->getMessage()]);
+            return response()->json([
+                'corporation_id' => null,
+                'period'         => Carbon::now()->format('Y-m'),
+                'mode'           => 'isk_visible',
+                'size'           => 10,
+                'corp_total'     => 0.0,
+                'top'            => [],
+                'viewer_row'     => null,
+                'viewer_in_top'  => false,
+            ], 500);
+        }
+    }
+
+    /**
+     * Personal Mining Manager tax compliance for the viewer's characters
+     * in this corp + period. Wraps
+     * ContributionService::getCharacterTaxCompliance.
+     *
+     * Returns mm_available=false (and only that key) when MM is absent
+     * so the frontend can suppress the card without confusing operators
+     * with an "ok 100%" reading on missing data.
+     */
+    public function personalMmCompliance(Request $request)
+    {
+        try {
+            $corporationId = $this->getCorporationId($request);
+            $period = $request->get('period');
+            if (! preg_match('/^\d{4}-\d{2}$/', (string) $period)) {
+                $period = Carbon::now()->format('Y-m');
+            }
+
+            $service = app(\CorpWalletManager\Services\ContributionService::class);
+            if (! $service->isMmInstalled()) {
+                return response()->json(['mm_available' => false]);
+            }
+            if (! $corporationId) {
+                return response()->json(['mm_available' => true, 'corporation_id' => null]);
+            }
+
+            // Aggregate compliance across every character the user owns.
+            // MM's tax service already takes (character_id, corporation_id),
+            // so feeding it owned chars from any current corp keeps the
+            // historical compliance picture intact when a member has moved
+            // chars between corps.
+            $characterIds = $this->viewerOwnedCharacterIds();
+            if (empty($characterIds)) {
+                return response()->json([
+                    'corporation_id' => (int) $corporationId,
+                    'period'         => $period,
+                    'mm_available'   => true,
+                    'amount_owed'    => 0.0,
+                    'amount_paid'    => 0.0,
+                    'compliance_pct' => null,
+                    'consecutive_overdue_periods' => 0,
+                    'breakdown_by_character' => [],
+                ]);
+            }
+
+            $totalOwed = 0.0;
+            $totalPaid = 0.0;
+            $worstConsecutive = 0;
+            $breakdown = [];
+
+            foreach ($characterIds as $cid) {
+                if ($cid < 90000000 || $cid === (int) $corporationId) {
+                    continue;
+                }
+                // Always ask for trailing 3 months so consecutive_overdue
+                // has enough window; the displayed pair is the current period
+                // owed/paid from the by_period[0] slot.
+                $result = $service->getCharacterTaxCompliance((int) $cid, (int) $corporationId, 3);
+                if ($result === null) {
+                    continue;
+                }
+                $byPeriod = $result['by_period'] ?? [];
+                $currentSlot = null;
+                foreach ($byPeriod as $row) {
+                    if ((string) ($row['period'] ?? '') === $period) {
+                        $currentSlot = $row;
+                        break;
+                    }
+                }
+                $owed = (float) ($currentSlot['owed'] ?? 0);
+                $paid = (float) ($currentSlot['paid'] ?? 0);
+                $totalOwed += $owed;
+                $totalPaid += $paid;
+                $worstConsecutive = max($worstConsecutive, (int) ($result['consecutive_overdue'] ?? 0));
+
+                $charName = (string) (DB::table('character_infos')->where('character_id', $cid)->value('name') ?? ('Character ' . $cid));
+                $breakdown[] = [
+                    'character_id'   => $cid,
+                    'character_name' => $charName,
+                    'amount_owed'    => $owed,
+                    'amount_paid'    => $paid,
+                    'compliance_pct' => $owed > 0.0 ? min(100.0, ($paid / $owed) * 100.0) : null,
+                ];
+            }
+
+            $compliancePct = $totalOwed > 0.0
+                ? min(100.0, ($totalPaid / $totalOwed) * 100.0)
+                : null;
+
+            return response()->json([
+                'corporation_id'               => (int) $corporationId,
+                'period'                       => $period,
+                'mm_available'                 => true,
+                'amount_owed'                  => $totalOwed,
+                'amount_paid'                  => $totalPaid,
+                'compliance_pct'               => $compliancePct,
+                'consecutive_overdue_periods'  => $worstConsecutive,
+                'breakdown_by_character'       => $breakdown,
+            ]);
+        } catch (\Exception $e) {
+            Log::error('personalMmCompliance failed', ['error' => $e->getMessage()]);
+            return response()->json(['mm_available' => false], 500);
+        }
+    }
+
+    /**
+     * Personal milestone ladder for the viewer in this corp. Reads
+     * `corpwalletmanager_member_milestone_state.highest_milestone_isk`
+     * for the viewer's characters, surfaces the rungs reached + the
+     * next rung's percent-to-go, and returns the recent crossings.
+     *
+     * Only emits lifetime milestones (1B/5B/10B/25B/50B/100B); the
+     * stall / compliance ones from the state row are HR-facing, not
+     * member-facing, and are deliberately excluded.
+     */
+    public function personalMilestones(Request $request)
+    {
+        try {
+            $corporationId = $this->getCorporationId($request);
+            $emptyShape = [
+                'corporation_id' => $corporationId,
+                'reached'        => [],
+                'next_milestone' => null,
+            ];
+            if (! $corporationId) {
+                return response()->json($emptyShape);
+            }
+
+            // Milestones rolled up across every character the user owns.
+            // The state row + the contribution cache are both keyed by
+            // (corporation_id, character_id), so the cache query below
+            // intersects the owner set with the requested corp - chars who
+            // never contributed to this corp simply have no rows and don't
+            // double-count milestones from a different corp.
+            $characterIds = $this->viewerOwnedCharacterIds();
+            if (empty($characterIds)) {
+                return response()->json($emptyShape);
+            }
+
+            $ladder = [
+                1_000_000_000   => '1B',
+                5_000_000_000   => '5B',
+                10_000_000_000  => '10B',
+                25_000_000_000  => '25B',
+                50_000_000_000  => '50B',
+                100_000_000_000 => '100B',
+            ];
+
+            $stateRows = DB::table('corpwalletmanager_member_milestone_state')
+                ->where('corporation_id', $corporationId)
+                ->whereIn('character_id', $characterIds)
+                ->where('character_id', '>=', 90000000)
+                ->whereColumn('character_id', '!=', 'corporation_id')
+                ->get(['character_id', 'highest_milestone_isk', 'updated_at']);
+
+            // Lifetime totals across the viewer's characters (used both
+            // for the per-character "next milestone" projection and the
+            // group-level next-rung calculation).
+            $lifetimePerChar = DB::table('corpwalletmanager_character_contributions')
+                ->where('corporation_id', $corporationId)
+                ->whereIn('character_id', $characterIds)
+                ->where('character_id', '>=', 90000000)
+                ->whereColumn('character_id', '!=', 'corporation_id')
+                ->selectRaw('character_id, SUM(total_contribution_amount) AS lifetime')
+                ->groupBy('character_id')
+                ->pluck('lifetime', 'character_id');
+
+            $charNames = DB::table('character_infos')
+                ->whereIn('character_id', $characterIds)
+                ->pluck('name', 'character_id');
+
+            $reached = [];
+            $highestAcrossAll = 0.0;
+            foreach ($stateRows as $row) {
+                $cid = (int) $row->character_id;
+                $highestForChar = (float) ($row->highest_milestone_isk ?? 0);
+                if ($highestForChar <= 0) {
+                    continue;
+                }
+                $highestAcrossAll = max($highestAcrossAll, $highestForChar);
+                // The state row only records the highest rung crossed, so
+                // we synthesise the entry from the rung + when the row
+                // was last updated (best available "crossed_at" signal).
+                $rungLabel = $ladder[(int) $highestForChar] ?? null;
+                if ($rungLabel === null) {
+                    continue;
+                }
+                $reached[] = [
+                    'milestone'       => $rungLabel,
+                    'crossed_at'      => (string) ($row->updated_at !== null
+                        ? Carbon::parse($row->updated_at)->format('Y-m-d')
+                        : Carbon::now()->format('Y-m-d')),
+                    'character_id'    => $cid,
+                    'character_name'  => (string) ($charNames[$cid] ?? ('Character ' . $cid)),
+                ];
+            }
+
+            // Sort newest first by crossed_at.
+            usort($reached, fn ($a, $b) => strcmp($b['crossed_at'], $a['crossed_at']));
+
+            // Next milestone is the next rung above the highest already
+            // crossed. We use the viewer's GROUP lifetime (sum across
+            // characters in this corp) so the "74% of the way to 25B"
+            // headline reflects everything they've contributed, not just
+            // their highest single alt.
+            $groupLifetime = (float) array_sum(array_map('floatval', $lifetimePerChar->toArray()));
+            $nextMilestone = null;
+            foreach ($ladder as $isk => $label) {
+                if ($isk > $highestAcrossAll) {
+                    $pctToNext = $isk > 0 ? min(100.0, ($groupLifetime / $isk) * 100.0) : 0.0;
+                    $nextMilestone = [
+                        'target'           => $label,
+                        'current_lifetime' => $groupLifetime,
+                        'pct_to_next'      => (float) $pctToNext,
+                    ];
+                    break;
+                }
+            }
+
+            return response()->json([
+                'corporation_id' => (int) $corporationId,
+                'reached'        => $reached,
+                'next_milestone' => $nextMilestone,
+            ]);
+        } catch (\Exception $e) {
+            Log::error('personalMilestones failed', ['error' => $e->getMessage()]);
+            return response()->json([
+                'corporation_id' => null,
+                'reached'        => [],
+                'next_milestone' => null,
+            ], 500);
+        }
+    }
+
+    /**
+     * Personal wallet snapshot for the viewer aggregated across every
+     * character they own (every row in `refresh_tokens` for the user
+     * with `deleted_at IS NULL`). Reads from the precomputed
+     * `corpwalletmanager_personal_wallet_aggregates` table; the actual
+     * scan of `character_wallet_journals` happens in the hourly
+     * background job (PersonalWalletAggregator + ComputePersonalWallet
+     * Aggregates) so the tab open is a small, bounded lookup.
+     *
+     * Returns the period's income / expense / net totals, the top 5 ref_type
+     * sources for each direction, the top 5 single transactions for each
+     * direction, a 6-month end-of-month balance sparkline (sum of each
+     * character's stored end_of_month_balance per period), the prior
+     * period's totals + trend %, and a per-character breakdown table so
+     * members can see which alt is the big earner.
+     *
+     * Query budget per tab open (after the cache miss): three small
+     * lookups against the aggregate table (current period across N
+     * chars, prior period across N chars, sparkline across N chars x
+     * 6 months) plus a names + main-character resolve. All bounded by
+     * N (the viewer's alt count), never by journal volume.
+     *
+     * Empty-state handling: if no aggregate row exists for a (character,
+     * period) tuple (newly installed plugin, or character not yet
+     * aggregated) we render muted placeholders rather than fall back
+     * to the live journal. The hourly cron (or the operator-run
+     * backfill command after upgrading) fills the gap.
+     */
+    public function personalWalletStats(Request $request)
+    {
+        try {
+            // Resolve the corp id only so the existing AuthorizesCorporationAccess
+            // gate runs (consistent with the other personal endpoints), even
+            // though the personal-wallet payload itself isn't corp-scoped.
+            $corporationId = $this->getCorporationId($request);
+
+            $period = $request->get('period');
+            if (! preg_match('/^\d{4}-\d{2}$/', (string) $period)) {
+                $period = Carbon::now()->format('Y-m');
+            }
+
+            $emptyShape = [
+                'period'             => $period,
+                'corporation_id'     => $corporationId,
+                'characters'         => [],
+                'aggregate' => [
+                    'income_total'             => 0.0,
+                    'expense_total'            => 0.0,
+                    'net_flow'                 => 0.0,
+                    'transaction_count'        => 0,
+                    'top_income_sources'       => [],
+                    'top_expense_sources'      => [],
+                    'top_income_transactions'  => [],
+                    'top_expense_transactions' => [],
+                ],
+                'by_character'      => new \stdClass(),
+                'sparkline_balance' => [],
+                'prior_period'      => [
+                    'income_total'  => 0.0,
+                    'expense_total' => 0.0,
+                    'net_flow'      => 0.0,
+                ],
+                'trend' => [
+                    'income_pct'  => null,
+                    'expense_pct' => null,
+                    'net_pct'     => null,
+                ],
+            ];
+
+            $ownedIds = $this->viewerOwnedCharacterIds();
+            if (empty($ownedIds)) {
+                return response()->json($emptyShape);
+            }
+
+            $userId = (int) auth()->id();
+
+            // ----- Cache layer ---------------------------------------------
+            // Per-user, per-period key. The character-id crc32 suffix
+            // naturally invalidates the entry when the viewer links or
+            // revokes an alt. The aggregate table itself only refreshes
+            // hourly, so a 5-minute TTL on top is cheap insurance against
+            // a hot-tab burst all hammering the read endpoint.
+            //
+            // When `?refresh=1` is present (wired to the tab nav's
+            // refresh button) we bypass the read but still write the
+            // fresh value back so the next vanilla hit is fast.
+            $charIdHash = crc32(implode(',', $ownedIds));
+            $cacheKey   = sprintf('cwm:personal-wallet-stats:%d:%s:%u', $userId, $period, $charIdHash);
+            $ttl        = 300; // 5 minutes
+            $refresh    = $request->boolean('refresh');
+            if (! $refresh) {
+                $cached = Cache::get($cacheKey);
+                if (is_array($cached)) {
+                    return response()->json($cached);
+                }
+            }
+
+            // Resolve display names for the per-character section. Missing
+            // rows fall back to "Character {id}" so the table stays full
+            // even if a character_infos row is missing.
+            $charNames = DB::table('character_infos')
+                ->whereIn('character_id', $ownedIds)
+                ->pluck('name', 'character_id');
+
+            // Mark the user's main so the table can pin / highlight it.
+            $mainCharacterId = (int) (DB::table('users')->where('id', $userId)->value('main_character_id') ?? 0);
+
+            $charactersMeta = [];
+            foreach ($ownedIds as $cid) {
+                $charactersMeta[] = [
+                    'id'      => (int) $cid,
+                    'name'    => (string) ($charNames[$cid] ?? ('Character ' . $cid)),
+                    'is_main' => $cid === $mainCharacterId,
+                ];
+            }
+
+            $priorPeriod = $this->priorPeriod($period);
+
+            // ----- Aggregate-table reads -----------------------------------
+            // The old implementation ran six on-demand SQL aggregates
+            // against the raw character_wallet_journals on every tab
+            // open. Even with proper indexing that scaled with the
+            // size of the journal (years of history x N alts) and on
+            // busy installs took minutes to return. The replacement
+            // does the heavy work once an hour in the background and
+            // serves reads from a small precomputed table keyed on
+            // (character_id, period).
+            //
+            // Current period: one row per character the viewer owns.
+            $currentRows = DB::table('corpwalletmanager_personal_wallet_aggregates')
+                ->whereIn('character_id', $ownedIds)
+                ->where('period', $period)
+                ->get();
+
+            // Prior period: one row per character the viewer owns. Used
+            // for the trend % vs last month.
+            $priorRows = DB::table('corpwalletmanager_personal_wallet_aggregates')
+                ->whereIn('character_id', $ownedIds)
+                ->where('period', $priorPeriod)
+                ->get(['character_id', 'income_total', 'expense_total']);
+
+            // Sparkline: one row per (character, period) for the
+            // trailing 6 months. We sum end_of_month_balance per period
+            // across characters in PHP.
+            $sparkStart = Carbon::now()->subMonthsNoOverflow(5)->startOfMonth();
+            $sparkPeriods = [];
+            for ($i = 0; $i < 6; $i++) {
+                $sparkPeriods[] = $sparkStart->copy()->addMonthsNoOverflow($i)->format('Y-m');
+            }
+            $sparkRows = DB::table('corpwalletmanager_personal_wallet_aggregates')
+                ->whereIn('character_id', $ownedIds)
+                ->whereIn('period', $sparkPeriods)
+                ->get(['period', 'end_of_month_balance']);
+
+            // ----- Merge current period across characters ------------------
+            $incomeTotal  = 0.0;
+            $expenseTotal = 0.0;
+            $txnCount     = 0;
+
+            // Initialise per-character buckets so a character with no
+            // aggregate row this period still appears in the table as
+            // zeros (the JS already renders that as "no activity").
+            $byCharTotals = [];
+            foreach ($ownedIds as $cid) {
+                $byCharTotals[$cid] = [
+                    'income_total'      => 0.0,
+                    'expense_total'     => 0.0,
+                    'net_flow'          => 0.0,
+                    'transaction_count' => 0,
+                ];
+            }
+
+            // Accumulators for the four merged top-5 lists.
+            $refIncomeAcc  = [];  // ref_type => ['amount'=>F, 'count'=>I, 'label'=>S]
+            $refExpenseAcc = [];
+            $txIncomeAcc   = [];
+            $txExpenseAcc  = [];
+
+            foreach ($currentRows as $r) {
+                $cid = (int) $r->character_id;
+                $rIncome  = (float) ($r->income_total ?? 0);
+                $rExpense = (float) ($r->expense_total ?? 0);
+                $rTxn     = (int) ($r->transaction_count ?? 0);
+
+                $incomeTotal  += $rIncome;
+                $expenseTotal += $rExpense;
+                $txnCount     += $rTxn;
+
+                if (isset($byCharTotals[$cid])) {
+                    $byCharTotals[$cid]['income_total']      = $rIncome;
+                    $byCharTotals[$cid]['expense_total']     = $rExpense;
+                    $byCharTotals[$cid]['net_flow']          = $rIncome - $rExpense;
+                    $byCharTotals[$cid]['transaction_count'] = $rTxn;
+                }
+
+                // Merge per-character top-5 ref-type lists. Aggregator
+                // already wrote one bounded JSON array per direction
+                // per (character, period), so each character contributes
+                // at most 5 entries here.
+                $jsonIncomeRef  = json_decode((string) ($r->top_income_ref_types ?? '[]'), true) ?: [];
+                $jsonExpenseRef = json_decode((string) ($r->top_expense_ref_types ?? '[]'), true) ?: [];
+                $jsonIncomeTx   = json_decode((string) ($r->top_income_transactions ?? '[]'), true) ?: [];
+                $jsonExpenseTx  = json_decode((string) ($r->top_expense_transactions ?? '[]'), true) ?: [];
+
+                foreach ($jsonIncomeRef as $entry) {
+                    $rt = (string) ($entry['ref_type'] ?? '');
+                    if ($rt === '') continue;
+                    if (! isset($refIncomeAcc[$rt])) {
+                        $refIncomeAcc[$rt] = [
+                            'ref_type' => $rt,
+                            'label'    => (string) ($entry['label'] ?? $this->refTypeLabel($rt)),
+                            'amount'   => 0.0,
+                            'count'    => 0,
+                        ];
+                    }
+                    $refIncomeAcc[$rt]['amount'] += (float) ($entry['amount'] ?? 0);
+                    $refIncomeAcc[$rt]['count']  += (int) ($entry['count'] ?? 0);
+                }
+                foreach ($jsonExpenseRef as $entry) {
+                    $rt = (string) ($entry['ref_type'] ?? '');
+                    if ($rt === '') continue;
+                    if (! isset($refExpenseAcc[$rt])) {
+                        $refExpenseAcc[$rt] = [
+                            'ref_type' => $rt,
+                            'label'    => (string) ($entry['label'] ?? $this->refTypeLabel($rt)),
+                            'amount'   => 0.0,
+                            'count'    => 0,
+                        ];
+                    }
+                    $refExpenseAcc[$rt]['amount'] += (float) ($entry['amount'] ?? 0);
+                    $refExpenseAcc[$rt]['count']  += (int) ($entry['count'] ?? 0);
+                }
+
+                // For top transactions, stamp character_name now because
+                // the aggregator stored character_id only.
+                $charName = (string) ($charNames[$cid] ?? ('Character ' . $cid));
+                foreach ($jsonIncomeTx as $entry) {
+                    $entry['character_id']   = $cid;
+                    $entry['character_name'] = $charName;
+                    $entry['amount']         = (float) ($entry['amount'] ?? 0);
+                    $txIncomeAcc[] = $entry;
+                }
+                foreach ($jsonExpenseTx as $entry) {
+                    $entry['character_id']   = $cid;
+                    $entry['character_name'] = $charName;
+                    $entry['amount']         = (float) ($entry['amount'] ?? 0);
+                    $txExpenseAcc[] = $entry;
+                }
+            }
+
+            // Re-sort + trim merged ref-type lists to top 5.
+            usort($refIncomeAcc, fn ($a, $b) => $b['amount'] <=> $a['amount']);
+            usort($refExpenseAcc, fn ($a, $b) => $b['amount'] <=> $a['amount']);
+            $topIncomeSources  = array_values(array_slice($refIncomeAcc, 0, 5));
+            $topExpenseSources = array_values(array_slice($refExpenseAcc, 0, 5));
+
+            // Re-sort + trim merged top transactions to top 5.
+            usort($txIncomeAcc, fn ($a, $b) => $b['amount'] <=> $a['amount']);
+            usort($txExpenseAcc, fn ($a, $b) => $b['amount'] <=> $a['amount']);
+            $topIncomeTransactions  = array_values(array_slice($txIncomeAcc, 0, 5));
+            $topExpenseTransactions = array_values(array_slice($txExpenseAcc, 0, 5));
+
+            // ----- Prior period totals -------------------------------------
+            $priorIncome  = 0.0;
+            $priorExpense = 0.0;
+            foreach ($priorRows as $r) {
+                $priorIncome  += (float) ($r->income_total ?? 0);
+                $priorExpense += (float) ($r->expense_total ?? 0);
+            }
+            $priorNet = $priorIncome - $priorExpense;
+
+            $pct = static function (float $current, float $prior): ?float {
+                if ($prior == 0.0) return null;
+                $p = (($current - $prior) / abs($prior)) * 100.0;
+                return max(-1000.0, min(1000.0, $p));
+            };
+
+            $currentNet = $incomeTotal - $expenseTotal;
+            $trend = [
+                'income_pct'  => $pct($incomeTotal, $priorIncome),
+                'expense_pct' => $pct($expenseTotal, $priorExpense),
+                'net_pct'     => $pct($currentNet, $priorNet),
+            ];
+
+            // ----- 6-month sparkline ---------------------------------------
+            // Sum stored end_of_month_balance across the viewer's
+            // characters per period; missing rows contribute zero so
+            // the JS always sees a dense 6-point series.
+            $sumByMonth = [];
+            foreach ($sparkRows as $r) {
+                $p = (string) $r->period;
+                if (! isset($sumByMonth[$p])) {
+                    $sumByMonth[$p] = 0.0;
+                }
+                $sumByMonth[$p] += (float) ($r->end_of_month_balance ?? 0);
+            }
+            $sparkline = [];
+            foreach ($sparkPeriods as $p) {
+                $sparkline[] = [
+                    'period'  => $p,
+                    'balance' => (float) ($sumByMonth[$p] ?? 0.0),
+                ];
+            }
+
+            // Build the by_character map (numeric-keyed). Use a stdClass
+            // sentinel so the JSON encoder emits an empty object rather
+            // than an empty array when no characters are present.
+            $byCharacter = [];
+            foreach ($byCharTotals as $cid => $totals) {
+                $byCharacter[(int) $cid] = [
+                    'name'              => (string) ($charNames[$cid] ?? ('Character ' . $cid)),
+                    'income_total'      => $totals['income_total'],
+                    'expense_total'     => $totals['expense_total'],
+                    'net_flow'          => $totals['net_flow'],
+                    'transaction_count' => $totals['transaction_count'],
+                ];
+            }
+
+            $payload = [
+                'period'             => $period,
+                'corporation_id'     => $corporationId,
+                'characters'         => $charactersMeta,
+                'aggregate' => [
+                    'income_total'             => $incomeTotal,
+                    'expense_total'            => $expenseTotal,
+                    'net_flow'                 => $currentNet,
+                    'transaction_count'        => $txnCount,
+                    'top_income_sources'       => $topIncomeSources,
+                    'top_expense_sources'      => $topExpenseSources,
+                    'top_income_transactions'  => $topIncomeTransactions,
+                    'top_expense_transactions' => $topExpenseTransactions,
+                ],
+                'by_character'      => empty($byCharacter) ? new \stdClass() : $byCharacter,
+                'sparkline_balance' => $sparkline,
+                'prior_period' => [
+                    'income_total'  => $priorIncome,
+                    'expense_total' => $priorExpense,
+                    'net_flow'      => $priorNet,
+                ],
+                'trend' => $trend,
+            ];
+
+            // by_character keys are integers; the JSON encoder will see
+            // an associative shape and emit an object, but stash an
+            // empty-array sentinel as the empty value via new \stdClass()
+            // (already handled above). Cache::put serialises through PHP
+            // serialize() so stdClass round-trips correctly.
+            Cache::put($cacheKey, $payload, $ttl);
+
+            return response()->json($payload);
+        } catch (\Exception $e) {
+            Log::error('personalWalletStats failed', ['error' => $e->getMessage(), 'trace' => $e->getTraceAsString()]);
+            return response()->json([
+                'period'             => Carbon::now()->format('Y-m'),
+                'corporation_id'     => null,
+                'characters'         => [],
+                'aggregate' => [
+                    'income_total'             => 0.0,
+                    'expense_total'            => 0.0,
+                    'net_flow'                 => 0.0,
+                    'transaction_count'        => 0,
+                    'top_income_sources'       => [],
+                    'top_expense_sources'      => [],
+                    'top_income_transactions'  => [],
+                    'top_expense_transactions' => [],
+                ],
+                'by_character'      => new \stdClass(),
+                'sparkline_balance' => [],
+                'prior_period'      => [
+                    'income_total'  => 0.0,
+                    'expense_total' => 0.0,
+                    'net_flow'      => 0.0,
+                ],
+                'trend' => [
+                    'income_pct'  => null,
+                    'expense_pct' => null,
+                    'net_pct'     => null,
+                ],
+            ], 500);
+        }
+    }
+
+    /**
+     * Human-readable label for a SeAT `ref_type` slug. CCP's ref_type strings
+     * are stable snake_case names like `bounty_prizes` or `market_transaction`
+     * so we title-case + space them. Special-cased a handful where the
+     * naive transform doesn't read right.
+     */
+    private function refTypeLabel(string $refType): string
+    {
+        $special = [
+            'bounty_prizes'                  => 'Bounty Prizes',
+            'agent_mission_reward'           => 'Mission Reward',
+            'agent_mission_time_bonus_reward' => 'Mission Time Bonus',
+            'agent_mission_collateral_paid'  => 'Mission Collateral Paid',
+            'agent_mission_collateral_refunded' => 'Mission Collateral Refunded',
+            'corporation_account_withdrawal' => 'Corp Withdrawal',
+            'player_donation'                => 'Player Donation',
+            'player_trading'                 => 'Player Trade',
+            'market_transaction'             => 'Market Transaction',
+            'market_escrow'                  => 'Market Escrow',
+            'broker_reimbursement'           => 'Broker Reimbursement',
+            'transaction_tax'                => 'Sales Tax',
+            'brokers_fee'                    => 'Broker Fee',
+            'contract_price'                 => 'Contract Price',
+            'contract_price_payment_corp'    => 'Contract Price (Corp)',
+            'contract_reward'                => 'Contract Reward',
+            'contract_collateral'            => 'Contract Collateral',
+            'contract_deposit'               => 'Contract Deposit',
+            'contract_deposit_refund'        => 'Contract Deposit Refund',
+            'contract_brokers_fee'           => 'Contract Broker Fee',
+            'office_rental_fee'              => 'Office Rental Fee',
+            'jump_clone_installation_fee'    => 'Jump Clone Install Fee',
+            'jump_clone_activation_fee'      => 'Jump Clone Activation Fee',
+            'industry_job_tax'               => 'Industry Tax',
+            'manufacturing'                  => 'Manufacturing',
+            'researching_time_productivity'  => 'Research (Time)',
+            'researching_material_productivity' => 'Research (Material)',
+            'copying'                        => 'Copying',
+            'invention'                      => 'Invention',
+            'reaction'                       => 'Reaction',
+            'reprocessing_tax'               => 'Reprocessing Tax',
+            'docking_fee'                    => 'Docking Fee',
+            'project_discovery_reward'       => 'Project Discovery',
+            'ess_escrow_transfer'            => 'ESS Escrow',
+            'planetary_construction'         => 'Planetary Construction',
+            'planetary_export_tax'           => 'Planetary Export Tax',
+            'planetary_import_tax'           => 'Planetary Import Tax',
+        ];
+        if (isset($special[$refType])) {
+            return $special[$refType];
+        }
+        if ($refType === '') {
+            return 'Unknown';
+        }
+        return ucwords(str_replace('_', ' ', $refType));
+    }
+
+    /**
+     * Every player character the authenticated user owns, regardless of
+     * which corporation those characters are currently in. Resolves via
+     * `refresh_tokens.user_id` -> `character_id` with no affiliation
+     * join, so a viewer's main that has since transferred to a different
+     * corp still counts toward their lifetime contribution to the corp
+     * being inspected (the corp scoping happens at the contribution-cache
+     * query, not here).
+     *
+     * This is the canonical "all of this user's characters" resolver for
+     * the member-facing surface. Both the contribution cache (corp-scoped
+     * via `WHERE corporation_id = $thisCorp AND character_id IN (...)`)
+     * and the personal-wallet aggregator (no corp filter, journal is
+     * inherently per-character) call it.
+     */
+    private function viewerOwnedCharacterIds(): array
+    {
+        $userId = (int) auth()->id();
+        if ($userId <= 0) {
+            return [];
+        }
+
+        return DB::table('refresh_tokens')
+            ->where('user_id', $userId)
+            ->whereNull('deleted_at')
+            ->pluck('character_id')
+            ->map(fn ($id) => (int) $id)
+            // Defensive NPC guard - refresh_tokens only ever holds player
+            // characters by definition, but we keep the floor in case of
+            // a future migration that loosens that invariant.
+            ->filter(fn ($id) => $id >= 90000000)
+            ->unique()
+            ->values()
+            ->all();
+    }
+
+    /**
+     * The set of main_character_ids associated with the viewer's
+     * character set. Used to flag the viewer's own row on the
+     * leaderboard regardless of whether they appear as a main or an
+     * alt-rolled-up entry. When a character has no main mapping (no
+     * users row, no refresh_token), the character itself is its own
+     * main and is included here as such.
+     */
+    private function mainsForViewerCharacters(array $characterIds): array
+    {
+        if (empty($characterIds)) {
+            return [];
+        }
+
+        $userId = (int) auth()->id();
+        if ($userId <= 0) {
+            return $characterIds;
+        }
+
+        $main = (int) (DB::table('users')->where('id', $userId)->value('main_character_id') ?? 0);
+
+        // Every character the user owns can be its own main on the
+        // leaderboard when SeAT's main resolution chain misses (no
+        // main set). Adding both lets us match either rendering shape.
+        $set = $characterIds;
+        if ($main > 0) {
+            $set[] = $main;
+        }
+        return array_values(array_unique(array_map('intval', $set)));
+    }
+
+    /**
+     * Calculate the viewer's rank in this period by main-grouped total.
+     * Matches the director-leaderboard grouping semantics so the
+     * member-facing rank and the director's rank stay reconcilable.
+     */
+    private function computeViewerRank(int $corporationId, string $period, array $viewerCharacterIds): array
+    {
+        $shape = ['rank' => null, 'rank_total' => 0, 'percentile' => null];
+        try {
+            $service = app(\CorpWalletManager\Services\ContributionService::class);
+            $board   = $service->getTopContributors($corporationId, $period, 1000);
+            $rows    = $board['contributors'] ?? [];
+            if (empty($rows)) {
+                return $shape;
+            }
+
+            $viewerMainSet = $this->mainsForViewerCharacters($viewerCharacterIds);
+            $rank = 0;
+            $viewerRank = null;
+            foreach ($rows as $row) {
+                $rank++;
+                $charId = (int) ($row['character_id'] ?? $row['main_character_id'] ?? 0);
+                if ($charId > 0 && in_array($charId, $viewerMainSet, true)) {
+                    $viewerRank = $rank;
+                    break;
+                }
+            }
+            $total = count($rows);
+            $percentile = null;
+            if ($viewerRank !== null && $total > 0) {
+                // Rank 1 = top of corp = 100; rank=total = 0.
+                $percentile = max(0.0, min(100.0, (($total - $viewerRank) / max(1, $total - 1)) * 100.0));
+            }
+            return [
+                'rank'       => $viewerRank,
+                'rank_total' => $total,
+                'percentile' => $percentile,
+            ];
+        } catch (\Throwable $e) {
+            Log::warning('computeViewerRank failed', ['error' => $e->getMessage()]);
+            return $shape;
+        }
+    }
+
+    /**
+     * SQL-only rank computation for personalContribution. Replaces the
+     * old computeViewerRank() which built the entire leaderboard (with
+     * EntityNameResolver fallback to ESI + per-row MM tax lookups for up
+     * to 1000 entries) just to read the viewer's row index off the
+     * sorted array - all of that name and tax work was throwaway for
+     * this caller.
+     *
+     * The grouping convention matches the director leaderboard so the
+     * member-facing rank and the director-facing rank stay reconcilable:
+     * rows are pulled from the contribution cache for the period, the
+     * income-only sum is computed inline, NPC/corp-self/affiliation
+     * guards apply, then per-character totals are rolled up into
+     * main-character buckets via refresh_tokens -> users.main_character_id
+     * (characters without a main resolve to themselves).
+     *
+     * Returns ['rank' => N|null, 'rank_total' => N, 'percentile' => N|null].
+     *
+     * EXPLAIN result: ref scan on
+     * `corpwalletmanager_character_contributions` via
+     * `cwm_char_contrib_corp_period` (corporation_id, period) composite
+     * index; estimated rows = corp_active_members_in_period (typically
+     * a few hundred even for big corps). The optional whereExists
+     * affiliation join is index-backed on
+     * (character_id, corporation_id). Refresh_tokens + users lookups
+     * use their primary keys.
+     */
+    private function computeViewerRankFast(int $corporationId, string $period, array $viewerCharacterIds): array
+    {
+        $shape = ['rank' => null, 'rank_total' => 0, 'percentile' => null];
+        try {
+            if (empty($viewerCharacterIds)) {
+                return $shape;
+            }
+
+            $incomeExpr = '(COALESCE(ratting_amount,0) ' .
+                ' + COALESCE(mission_amount,0) ' .
+                ' + COALESCE(industry_amount,0) ' .
+                ' + COALESCE(tax_payment_amount,0) ' .
+                ' + COALESCE(donation_voluntary_amount,0))';
+
+            $hasAffiliations = Schema::hasTable('character_affiliations');
+            $hasAllianceInfos = Schema::hasTable('alliance_infos');
+
+            // Pull per-character income totals for the period, applying
+            // the same defensive guards as the leaderboard. This is the
+            // candidate set we group into mains. Indexed scan via
+            // (corporation_id, period).
+            $rows = DB::table('corpwalletmanager_character_contributions')
+                ->where('corporation_id', $corporationId)
+                ->where('period', $period)
+                ->where('character_id', '>=', 90000000)
+                ->whereColumn('character_id', '!=', 'corporation_id')
+                ->whereNotIn('character_id', function ($q) {
+                    $q->select('corporation_id')->from('corporation_infos');
+                })
+                ->when($hasAllianceInfos, function ($outer) {
+                    $outer->whereNotIn('character_id', function ($q) {
+                        $q->select('alliance_id')->from('alliance_infos');
+                    });
+                })
+                ->when($hasAffiliations, function ($outer) use ($corporationId) {
+                    $outer->whereExists(function ($q) use ($corporationId) {
+                        $q->select(DB::raw(1))
+                            ->from('character_affiliations')
+                            ->whereColumn('character_affiliations.character_id', 'corpwalletmanager_character_contributions.character_id')
+                            ->where('character_affiliations.corporation_id', $corporationId);
+                    });
+                })
+                ->selectRaw('character_id, ' . $incomeExpr . ' AS income_total')
+                // WHERE not HAVING — MariaDB strict mode rejects HAVING on
+                // non-grouping columns when the query has no GROUP BY.
+                ->whereRaw($incomeExpr . ' > 0')
+                ->get();
+
+            if ($rows->isEmpty()) {
+                return $shape;
+            }
+
+            $charIds = $rows->pluck('character_id')->map(fn ($id) => (int) $id)->unique()->values()->all();
+
+            // Resolve each char -> main via refresh_tokens (user) ->
+            // users.main_character_id. Characters without a main resolve
+            // to themselves (their own main).
+            $charToUser = DB::table('refresh_tokens')
+                ->whereIn('character_id', $charIds)
+                ->whereNull('deleted_at')
+                ->pluck('user_id', 'character_id');
+            $userToMain = [];
+            if ($charToUser->isNotEmpty()) {
+                $userIds = $charToUser->values()->unique()->all();
+                $userToMain = DB::table('users')
+                    ->whereIn('id', $userIds)
+                    ->whereNotNull('main_character_id')
+                    ->pluck('main_character_id', 'id')
+                    ->toArray();
+            }
+            $mainMap = [];
+            foreach ($charToUser as $cid => $uid) {
+                if (isset($userToMain[$uid])) {
+                    $mainMap[(int) $cid] = (int) $userToMain[$uid];
+                }
+            }
+
+            // Roll rows into main-grouped totals.
+            $mainTotals = [];
+            foreach ($rows as $r) {
+                $charId = (int) $r->character_id;
+                $mainId = $mainMap[$charId] ?? $charId;
+                if (! isset($mainTotals[$mainId])) {
+                    $mainTotals[$mainId] = 0.0;
+                }
+                $mainTotals[$mainId] += (float) $r->income_total;
+            }
+
+            // The viewer's main set - matches the leaderboard's notion
+            // of "the viewer's row" even when an alt is on the board
+            // because their main has no contribution this period.
+            $viewerMainSet = $this->mainsForViewerCharacters($viewerCharacterIds);
+            $viewerTotal = 0.0;
+            foreach ($viewerMainSet as $vmId) {
+                if (isset($mainTotals[(int) $vmId])) {
+                    $viewerTotal = max($viewerTotal, $mainTotals[(int) $vmId]);
+                }
+            }
+
+            $total = count($mainTotals);
+            if ($total === 0 || $viewerTotal <= 0.0) {
+                return ['rank' => null, 'rank_total' => $total, 'percentile' => null];
+            }
+
+            // Rank = 1 + (# of mains with a strictly higher total).
+            $higher = 0;
+            foreach ($mainTotals as $mid => $t) {
+                if ($t > $viewerTotal) {
+                    $higher++;
+                }
+            }
+            $viewerRank = $higher + 1;
+
+            $percentile = null;
+            if ($total > 0) {
+                $percentile = max(0.0, min(100.0, (($total - $viewerRank) / max(1, $total - 1)) * 100.0));
+            }
+
+            return [
+                'rank'       => $viewerRank,
+                'rank_total' => $total,
+                'percentile' => $percentile,
+            ];
+        } catch (\Throwable $e) {
+            Log::warning('computeViewerRankFast failed', ['error' => $e->getMessage()]);
+            return $shape;
+        }
+    }
+
+    /**
+     * Calculate the prior calendar period (Y-m string) from a Y-m input.
+     * Used by personalContribution for the trend vs last month figure.
+     */
+    private function priorPeriod(string $period): string
+    {
+        if (! preg_match('/^(\d{4})-(\d{2})$/', $period, $m)) {
+            return Carbon::now()->subMonth()->format('Y-m');
+        }
+        $year = (int) $m[1];
+        $month = (int) $m[2];
+        $month--;
+        if ($month < 1) {
+            $month = 12;
+            $year--;
+        }
+        return sprintf('%04d-%02d', $year, $month);
+    }
+
     /**
      * Log member access for tracking
      */
@@ -1736,11 +3199,14 @@ class WalletController extends Controller
             ->selectRaw('DATE(date) as day, SUM(amount) as daily_change')
             ->where('date', '>=', $thirtyDaysAgo)
             ->groupBy('day');
-        
+
         if ($corporationId) {
             $query->where('corporation_id', $corporationId);
+            $query = JournalFilters::excludeInternalTransfers($query, (int) $corporationId);
+        } else {
+            $query = JournalFilters::excludeInternalTransfers($query);
         }
-        
+
         $dailyChanges = $query->get();
         $positiveDays = $dailyChanges->filter(function ($day) {
             return $day->daily_change > 0;
@@ -1869,6 +3335,7 @@ class WalletController extends Controller
             'agent_mission_reward' => 'Mission Rewards',
             'agent_mission_time_bonus_reward' => 'Mission Time Bonus',
             'corporation_account_withdrawal' => 'Corp Withdrawal',
+            'alliance_tax' => 'Alliance Tax',
             'corporation_dividend_payment' => 'Dividend Payment',
             'corporation_logo_change_cost' => 'Logo Change',
             'corporation_payment' => 'Corp Payment',

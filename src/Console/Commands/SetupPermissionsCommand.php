@@ -1,5 +1,5 @@
 <?php
-namespace Seat\CorpWalletManager\Console\Commands;
+namespace CorpWalletManager\Console\Commands;
 
 use Illuminate\Console\Command;
 use Seat\Web\Models\Acl\Permission;

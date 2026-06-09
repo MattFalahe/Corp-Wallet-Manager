@@ -1,5 +1,5 @@
 <?php
-namespace Seat\CorpWalletManager\Jobs;
+namespace CorpWalletManager\Jobs;
 
 use Illuminate\Bus\Queueable;
 use Illuminate\Contracts\Queue\ShouldQueue;
@@ -9,8 +9,9 @@ use Illuminate\Queue\SerializesModels;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Schema;
 use Illuminate\Support\Facades\Log;
-use Seat\CorpWalletManager\Models\DivisionBalance;
-use Seat\CorpWalletManager\Models\RecalcLog;
+use CorpWalletManager\Models\DivisionBalance;
+use CorpWalletManager\Models\RecalcLog;
+use CorpWalletManager\Support\JournalFilters;
 
 class BackfillDivisionWalletData implements ShouldQueue
 {
@@ -22,7 +23,23 @@ class BackfillDivisionWalletData implements ShouldQueue
 
     public function __construct($corporationId = null)
     {
-        $this->corporationId = $corporationId;
+        // Defensive: an empty string / 0 / non-numeric value (typical when
+        // Settings::getSetting('selected_corporation_id') returns '') would
+        // otherwise reach RecalcLog::create() and trip MySQL's BIGINT type
+        // check with "Incorrect integer value: '' for column corporation_id".
+        $this->corporationId = (is_numeric($corporationId) && (int) $corporationId > 0)
+            ? (int) $corporationId
+            : null;
+    }
+
+    public function tags(): array
+    {
+        return [
+            'corpwalletmanager',
+            'backfill',
+            'divisions',
+            'corp:' . ($this->corporationId ?? 'all'),
+        ];
     }
 
     public function handle()
@@ -46,19 +63,23 @@ class BackfillDivisionWalletData implements ShouldQueue
                 ->selectRaw('
                     corporation_id,
                     division as division_id,
-                    DATE_FORMAT(date, "%Y-%m") as month, 
+                    DATE_FORMAT(date, "%Y-%m") as month,
                     SUM(amount) as balance
                 ')
                 ->whereNotNull('corporation_id')
-                ->whereNotNull('division')
-                ->groupBy('corporation_id', 'division', 'month')
-                ->orderBy('corporation_id')
-                ->orderBy('division')
-                ->orderBy('month');
+                ->whereNotNull('division');
 
             if ($this->corporationId) {
                 $query->where('corporation_id', $this->corporationId);
+                $query = JournalFilters::excludeInternalTransfers($query, $this->corporationId);
+            } else {
+                $query = JournalFilters::excludeInternalTransfers($query);
             }
+
+            $query->groupBy('corporation_id', 'division', 'month')
+                ->orderBy('corporation_id')
+                ->orderBy('division')
+                ->orderBy('month');
 
             $results = $query->get();
             
@@ -85,7 +106,11 @@ class BackfillDivisionWalletData implements ShouldQueue
                         ['balance' => (float)($row->balance ?? 0)]
                     );
                     $processed++;
-                } catch (\Exception $e) {
+                } catch (\Illuminate\Database\QueryException $e) {
+                    // Database-layer failure — fail the job rather than silently
+                    // logging against a broken DB.
+                    throw $e;
+                } catch (\Throwable $e) {
                     Log::warning('BackfillDivisionWalletData: Failed to process record', [
                         'corporation_id' => $row->corporation_id,
                         'division_id' => $row->division_id,

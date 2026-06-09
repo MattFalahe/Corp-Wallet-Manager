@@ -1,10 +1,10 @@
 <?php
-namespace Seat\CorpWalletManager\Models;
+namespace CorpWalletManager\Models;
 
-use Illuminate\Database\Eloquent\Model;
 use Illuminate\Support\Facades\Log;
+use Seat\Services\Models\ExtensibleModel;
 
-class MonthlyBalance extends Model
+class MonthlyBalance extends ExtensibleModel
 {
     protected $table = 'corpwalletmanager_monthly_balances';
     

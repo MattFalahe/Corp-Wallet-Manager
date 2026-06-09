@@ -1,11 +1,12 @@
 <?php
-namespace Seat\CorpWalletManager\Services;
+namespace CorpWalletManager\Services;
 
 use Carbon\Carbon;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
-use Seat\CorpWalletManager\Models\MonthlyBalance;
-use Seat\CorpWalletManager\Models\Prediction;
+use CorpWalletManager\Models\MonthlyBalance;
+use CorpWalletManager\Models\Prediction;
+use CorpWalletManager\Support\JournalFilters;
 
 class PredictionService
 {
@@ -17,48 +18,37 @@ class PredictionService
         'quarter_old' => 0.12,       // 91-180 days ago
         'half_year' => 0.08,         // 181-365 days ago
     ];
-    
-    // Seasonal patterns based on EVE Online typical activity
-    private const SEASONAL_FACTORS = [
-        'day_of_week' => [
-            1 => 0.92,  // Monday
-            2 => 0.94,  // Tuesday
-            3 => 0.96,  // Wednesday
-            4 => 0.98,  // Thursday
-            5 => 1.08,  // Friday (pre-weekend surge)
-            6 => 1.12,  // Saturday (peak)
-            7 => 1.10,  // Sunday (high activity)
-        ],
-        'week_of_month' => [
-            1 => 0.95,  // First week (post-billing recovery)
-            2 => 1.00,  // Second week (normal)
-            3 => 1.02,  // Third week (building up)
-            4 => 1.03,  // Fourth week (pre-billing surge)
-        ],
-        'month_of_year' => [
-            1 => 1.05,  // January (post-holiday return)
-            2 => 1.00,  // February
-            3 => 1.02,  // March
-            4 => 1.00,  // April
-            5 => 0.98,  // May
-            6 => 0.95,  // June (summer slowdown begins)
-            7 => 0.92,  // July (summer)
-            8 => 0.90,  // August (peak summer slowdown)
-            9 => 0.98,  // September (return from summer)
-            10 => 1.02, // October
-            11 => 1.05, // November (holiday preparations)
-            12 => 1.08, // December (holiday activity)
-        ]
-    ];
-    
+
     private $corporationId;
     private $historicalData = [];
     private $activityPatterns = [];
     private $confidence = 0;
-    
-    public function __construct($corporationId)
+    private $seasonalFactors;
+    private ?float $observedMape30d = null;
+
+    public function __construct($corporationId, ?SeasonalFactorLearner $learner = null)
     {
         $this->corporationId = $corporationId;
+        $learner = $learner ?? app(SeasonalFactorLearner::class);
+        $this->seasonalFactors = $learner->getFactors((int) $corporationId);
+        $this->observedMape30d = $this->loadObservedMape((int) $corporationId);
+    }
+
+    /**
+     * Look up the 30-day MAPE stored by BacktestService, if it exists.
+     * Null means we have no backtest data yet (newly installed, or no
+     * predictions old enough to compare against actuals).
+     */
+    private function loadObservedMape(int $corporationId): ?float
+    {
+        try {
+            $value = DB::table('corpwalletmanager_prediction_metrics')
+                ->where('corporation_id', $corporationId)
+                ->value('mape_30d');
+            return $value !== null ? (float) $value : null;
+        } catch (\Throwable $e) {
+            return null;
+        }
     }
     
     /**
@@ -98,10 +88,16 @@ class PredictionService
     {
         $twelveMonthsAgo = Carbon::now()->subMonths(12)->startOfDay();
         
-        // Simpler approach - get raw data and process in PHP
-        $rawData = DB::table('corporation_wallet_journals')
+        // Simpler approach - get raw data and process in PHP.
+        // Internal transfers (+X / -X pairs the corp moves between its own
+        // divisions) double-count daily_income AND daily_expenses while
+        // netting to zero on daily_change, so strip them before any
+        // per-day aggregation downstream.
+        $rawDataQuery = DB::table('corporation_wallet_journals')
             ->where('corporation_id', $this->corporationId)
-            ->where('date', '>=', $twelveMonthsAgo)
+            ->where('date', '>=', $twelveMonthsAgo);
+        $rawDataQuery = JournalFilters::excludeInternalTransfers($rawDataQuery, (int) $this->corporationId);
+        $rawData = $rawDataQuery
             ->select('date', 'amount', 'ref_type')
             ->orderBy('date')
             ->get();
@@ -310,14 +306,14 @@ class PredictionService
             
             // Day of week adjustment (with fallback)
             $dayOfWeek = $date->dayOfWeek == 0 ? 7 : $date->dayOfWeek;
-            $dayFactor = self::SEASONAL_FACTORS['day_of_week'][$dayOfWeek] ?? 1.0;
-            
+            $dayFactor = $this->seasonalFactors['day_of_week'][$dayOfWeek] ?? 1.0;
+
             // Week of month adjustment (with bounds check)
             $weekOfMonth = min(4, max(1, ceil($date->day / 7))); // Ensure 1-4 range
-            $weekFactor = self::SEASONAL_FACTORS['week_of_month'][$weekOfMonth] ?? 1.0;
-            
+            $weekFactor = $this->seasonalFactors['week_of_month'][$weekOfMonth] ?? 1.0;
+
             // Month of year adjustment
-            $monthFactor = self::SEASONAL_FACTORS['month_of_year'][$date->month] ?? 1.0;
+            $monthFactor = $this->seasonalFactors['month_of_year'][$date->month] ?? 1.0;
             
             // Combine factors (multiplicative)
             $seasonalFactor = $dayFactor * $weekFactor * $monthFactor;
@@ -570,10 +566,15 @@ class PredictionService
     {
         $twelveMonthsAgo = Carbon::now()->subMonths(12);
         
-        // Get raw data and process in PHP
-        $rawData = DB::table('corporation_wallet_journals')
+        // Get raw data and process in PHP.
+        // Internal transfers skew monthly avg() because the +X and -X halves
+        // both appear in the per-month list and inflate the variance with
+        // signal that doesn't represent real corp wallet movement.
+        $rawDataQuery = DB::table('corporation_wallet_journals')
             ->where('corporation_id', $this->corporationId)
-            ->where('date', '>=', $twelveMonthsAgo)
+            ->where('date', '>=', $twelveMonthsAgo);
+        $rawDataQuery = JournalFilters::excludeInternalTransfers($rawDataQuery, (int) $this->corporationId);
+        $rawData = $rawDataQuery
             ->select('date', 'amount')
             ->get();
         
@@ -612,9 +613,15 @@ class PredictionService
         // Get raw data and process in PHP to avoid GROUP BY issues
         $sixMonthsAgo = Carbon::now()->subMonths(6);
         
-        $rawTransactions = DB::table('corporation_wallet_journals')
+        // Internal transfers share ref_type=corporation_account_withdrawal
+        // and recur on the same days the corp moves ISK between divisions;
+        // without this filter they'd be flagged as "reliable recurring
+        // bills" and added to every prediction.
+        $rawTransactionsQuery = DB::table('corporation_wallet_journals')
             ->where('corporation_id', $this->corporationId)
-            ->where('date', '>=', $sixMonthsAgo)
+            ->where('date', '>=', $sixMonthsAgo);
+        $rawTransactionsQuery = JournalFilters::excludeInternalTransfers($rawTransactionsQuery, (int) $this->corporationId);
+        $rawTransactions = $rawTransactionsQuery
             ->select('date', 'amount', 'ref_type')
             ->get();
         
@@ -730,19 +737,30 @@ class PredictionService
     }
     
     /**
-     * Calculate confidence for a specific day ahead
+     * Calculate confidence for a specific day ahead.
+     *
+     * When BacktestService has written an observed 30-day MAPE for this
+     * corporation, we derive base confidence from it: a model that has
+     * been averaging 8% error recently starts at 92% confidence, not at
+     * an ungrounded 95%. Otherwise we fall back to the original linear
+     * 2%/day decay (for new installs with no backtest history yet).
      */
     private function calculateDayConfidence($daysAhead)
     {
-        // Base confidence starts at 95% for tomorrow
-        $baseConfidence = 95;
-        
-        // Decay rate: lose about 2% confidence per day
-        $decayRate = 2;
-        
+        if ($this->observedMape30d !== null) {
+            // Clamp MAPE to [2, 60] so pathological values don't collapse
+            // confidence to 0 or inflate it past the 98% ceiling.
+            $clampedMape = max(2.0, min(60.0, $this->observedMape30d));
+            $baseConfidence = 100.0 - $clampedMape;
+            // Horizon decay is gentler when the base is already data-backed.
+            $decayRate = 1.0;
+        } else {
+            $baseConfidence = 95;
+            $decayRate = 2;
+        }
+
         $confidence = $baseConfidence - ($daysAhead * $decayRate);
-        
-        // Minimum confidence of 20%
+
         return max(20, $confidence);
     }
     

@@ -1,5 +1,5 @@
 <?php
-namespace Seat\CorpWalletManager\Jobs;
+namespace CorpWalletManager\Jobs;
 
 use Illuminate\Bus\Queueable;
 use Illuminate\Contracts\Queue\ShouldQueue;
@@ -9,10 +9,16 @@ use Illuminate\Queue\SerializesModels;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
 use Carbon\Carbon;
-use Seat\CorpWalletManager\Models\Prediction;
-use Seat\CorpWalletManager\Models\MonthlyBalance;
-use Seat\CorpWalletManager\Models\RecalcLog;
-use Seat\CorpWalletManager\Services\PredictionService;
+use CorpWalletManager\Models\Prediction;
+use CorpWalletManager\Models\MonthlyBalance;
+use CorpWalletManager\Models\RecalcLog;
+use CorpWalletManager\Services\ModelSelector;
+use CorpWalletManager\Services\Models\EwmaModel;
+use CorpWalletManager\Services\Models\LinearTrendModel;
+use CorpWalletManager\Services\Models\PredictionModel;
+use CorpWalletManager\Services\Models\SeasonalNaiveModel;
+use CorpWalletManager\Services\PredictionService;
+use CorpWalletManager\Support\JournalFilters;
 
 class ComputeDailyPrediction implements ShouldQueue
 {
@@ -24,7 +30,22 @@ class ComputeDailyPrediction implements ShouldQueue
 
     public function __construct($corporationId = null)
     {
-        $this->corporationId = $corporationId;
+        // Defensive: an empty string / 0 / non-numeric value (typical when
+        // Settings::getSetting('selected_corporation_id') returns '') would
+        // otherwise reach RecalcLog::create() and trip MySQL's BIGINT type
+        // check with "Incorrect integer value: '' for column corporation_id".
+        $this->corporationId = (is_numeric($corporationId) && (int) $corporationId > 0)
+            ? (int) $corporationId
+            : null;
+    }
+
+    public function tags(): array
+    {
+        return [
+            'corpwalletmanager',
+            'predictions',
+            'corp:' . ($this->corporationId ?? 'all'),
+        ];
     }
 
     public function handle()
@@ -50,7 +71,9 @@ class ComputeDailyPrediction implements ShouldQueue
                 foreach ($corporationIds as $corpId) {
                     try {
                         $processed += $this->computeAdvancedPredictions($corpId);
-                    } catch (\Exception $e) {
+                    } catch (\Illuminate\Database\QueryException $e) {
+                        throw $e;
+                    } catch (\Throwable $e) {
                         Log::warning('ComputeDailyPrediction: Failed for corporation', [
                             'corporation_id' => $corpId,
                             'error' => $e->getMessage()
@@ -121,9 +144,23 @@ class ComputeDailyPrediction implements ShouldQueue
             return $this->computeSimplePredictions($corporationId);
         }
 
-        // Use the new prediction service
+        // Ensemble selection: run the simpler candidate models on a
+        // holdout, compare their best to advanced_weighted's observed
+        // accuracy. Only switch when the simple winner is meaningfully
+        // better (mape below 70% of advanced's observed mape) — we
+        // don't want to abandon the sophisticated model for noise.
+        $ensembleChoice = $this->resolveEnsembleChoice($corporationId);
+        if ($ensembleChoice['use_simple']) {
+            return $this->computeEnsembleSimplePredictions(
+                $corporationId,
+                $ensembleChoice['model'],
+                $ensembleChoice['selection']
+            );
+        }
+
+        // Advanced weighted model (default path).
         $predictionService = new PredictionService($corporationId);
-        
+
         // Generate predictions for different time horizons
         $predictions30Days = $predictionService->generatePredictions(30);
         $predictions60Days = $predictionService->generatePredictions(60);
@@ -218,11 +255,14 @@ class ComputeDailyPrediction implements ShouldQueue
     {
         $threeMonthsAgo = Carbon::now()->subMonths(3);
         
-        $dataPoints = DB::table('corporation_wallet_journals')
+        $dataPointsQuery = DB::table('corporation_wallet_journals')
             ->where('corporation_id', $corporationId)
-            ->where('date', '>=', $threeMonthsAgo)
-            ->count();
-        
+            ->where('date', '>=', $threeMonthsAgo);
+        // Internal transfers inflate the row count without adding real signal;
+        // strip them so the 60-row threshold reflects genuine activity.
+        $dataPointsQuery = JournalFilters::excludeInternalTransfers($dataPointsQuery, (int) $corporationId);
+        $dataPoints = $dataPointsQuery->count();
+
         // Need at least 60 days of data for reliable predictions
         return $dataPoints >= 60;
     }
@@ -297,14 +337,19 @@ class ComputeDailyPrediction implements ShouldQueue
     private function storePredictionMetrics($corporationId, $predictions)
     {
         try {
+            // Match the filter applied in hasEnoughHistoricalData so the
+            // audit metric reports the same "real" row count predictions
+            // were actually trained on (no internal-transfer noise).
+            $dataPointsQuery = DB::table('corporation_wallet_journals')
+                ->where('corporation_id', $corporationId)
+                ->where('date', '>=', Carbon::now()->subMonths(12));
+            $dataPointsQuery = JournalFilters::excludeInternalTransfers($dataPointsQuery, (int) $corporationId);
+
             // Calculate and store prediction quality metrics
             $metrics = [
                 'corporation_id' => $corporationId,
                 'prediction_date' => now(),
-                'data_points_used' => DB::table('corporation_wallet_journals')
-                    ->where('corporation_id', $corporationId)
-                    ->where('date', '>=', Carbon::now()->subMonths(12))
-                    ->count(),
+                'data_points_used' => $dataPointsQuery->count(),
                 'average_confidence' => collect($predictions)->avg('confidence'),
                 'volatility_factor' => $this->calculateVolatilityFactor($corporationId),
                 'trend_strength' => $this->calculateTrendStrength($corporationId),
@@ -325,15 +370,152 @@ class ComputeDailyPrediction implements ShouldQueue
     }
 
     /**
+     * Decide whether the simple-model ensemble should replace the advanced
+     * model for this corporation. Returns ['use_simple' => bool, 'model'
+     * => ?PredictionModel, 'selection' => ?array]. Conservative: only
+     * switches if the selector's winner is at least 30% better than
+     * advanced_weighted's observed 30-day MAPE.
+     */
+    private function resolveEnsembleChoice($corporationId): array
+    {
+        try {
+            $selection = app(ModelSelector::class)->selectBestModel((int) $corporationId);
+        } catch (\Throwable $e) {
+            $selection = null;
+        }
+
+        if ($selection === null) {
+            return ['use_simple' => false, 'model' => null, 'selection' => null];
+        }
+
+        $observedMape = DB::table('corpwalletmanager_prediction_metrics')
+            ->where('corporation_id', $corporationId)
+            ->value('mape_30d');
+
+        if ($observedMape === null || $selection['mape'] >= $observedMape * 0.7) {
+            return ['use_simple' => false, 'model' => null, 'selection' => $selection];
+        }
+
+        $model = $this->instantiateSimpleModel($selection['name']);
+        if ($model === null) {
+            return ['use_simple' => false, 'model' => null, 'selection' => $selection];
+        }
+
+        Log::info('ComputeDailyPrediction: ensemble switching to simple model', [
+            'corporation_id' => $corporationId,
+            'winner' => $selection['name'],
+            'winner_mape' => $selection['mape'],
+            'advanced_observed_mape' => $observedMape,
+        ]);
+
+        return ['use_simple' => true, 'model' => $model, 'selection' => $selection];
+    }
+
+    private function instantiateSimpleModel(string $name): ?PredictionModel
+    {
+        switch ($name) {
+            case 'ewma':
+                return new EwmaModel();
+            case 'linear_trend':
+                return new LinearTrendModel();
+            case 'seasonal_naive':
+                return new SeasonalNaiveModel();
+        }
+        return null;
+    }
+
+    /**
+     * Generate 30-day predictions using a simple ensemble model.
+     * Shares the same predictions table schema as advanced_weighted —
+     * just fewer flourishes and no 60/90-day tail (the simple models
+     * are baselines, not long-horizon forecasters).
+     */
+    private function computeEnsembleSimplePredictions($corporationId, PredictionModel $model, array $selection): int
+    {
+        // Strip internal transfers so the simple models train on real daily
+        // change, not on the cancelling +X/-X pairs that contribute zero net
+        // movement but pollute SUM(amount) when only one side of the pair
+        // happens to land in a particular DATE() bucket.
+        $historyQuery = DB::table('corporation_wallet_journals')
+            ->where('corporation_id', $corporationId)
+            ->where('date', '>=', Carbon::now()->subDays(365)->startOfDay());
+        $historyQuery = JournalFilters::excludeInternalTransfers($historyQuery, (int) $corporationId);
+        $history = $historyQuery
+            ->selectRaw('DATE(date) as day, SUM(amount) as daily_change')
+            ->groupBy('day')
+            ->orderBy('day')
+            ->get();
+
+        if ($history->isEmpty()) {
+            return 0;
+        }
+
+        $model->fit($history);
+
+        // Internal transfers net to zero across the pair, so excluding
+        // them keeps the sum identical while staying consistent with the
+        // history we just trained on (and any future single-sided edge case).
+        $runningBalanceQuery = DB::table('corporation_wallet_journals')
+            ->where('corporation_id', $corporationId);
+        $runningBalanceQuery = JournalFilters::excludeInternalTransfers($runningBalanceQuery, (int) $corporationId);
+        $runningBalance = (float) $runningBalanceQuery->sum('amount');
+
+        // Confidence comes from the holdout MAPE that won selection.
+        $baseConfidence = max(40.0, 100.0 - min(60.0, max(2.0, (float) $selection['mape'])));
+
+        Prediction::where('corporation_id', $corporationId)
+            ->where('date', '>=', Carbon::today()->format('Y-m-d'))
+            ->delete();
+
+        $insertData = [];
+        for ($i = 1; $i <= 30; $i++) {
+            $targetDate = Carbon::now()->addDays($i);
+            $change = $model->predictDailyChange(new \DateTimeImmutable($targetDate->format('Y-m-d')));
+            $runningBalance += $change;
+
+            $confidence = max(20.0, $baseConfidence - ($i * 1.0));
+
+            $insertData[] = [
+                'corporation_id' => $corporationId,
+                'date' => $targetDate->format('Y-m-d'),
+                'predicted_balance' => $runningBalance,
+                'confidence' => $confidence,
+                'lower_bound' => null,
+                'upper_bound' => null,
+                'prediction_method' => $model->name(),
+                'metadata' => json_encode([
+                    'predicted_change' => $change,
+                    'ensemble_winner' => $selection['name'],
+                    'ensemble_winner_mape' => $selection['mape'],
+                    'ensemble_scores' => $selection['scores'],
+                ]),
+                'created_at' => now(),
+                'updated_at' => now(),
+            ];
+        }
+
+        foreach (array_chunk($insertData, 100) as $chunk) {
+            Prediction::insert($chunk);
+        }
+
+        return count($insertData);
+    }
+
+    /**
      * Calculate volatility factor for metrics
      */
     private function calculateVolatilityFactor($corporationId)
     {
         $thirtyDaysAgo = Carbon::now()->subDays(30);
-        
-        $dailyChanges = DB::table('corporation_wallet_journals')
+
+        // Internal-transfer halves can land in different DATE() buckets and
+        // distort the daily change distribution; exclude them so the
+        // std-dev / mean ratio reflects only real corp wallet activity.
+        $dailyChangesQuery = DB::table('corporation_wallet_journals')
             ->where('corporation_id', $corporationId)
-            ->where('date', '>=', $thirtyDaysAgo)
+            ->where('date', '>=', $thirtyDaysAgo);
+        $dailyChangesQuery = JournalFilters::excludeInternalTransfers($dailyChangesQuery, (int) $corporationId);
+        $dailyChanges = $dailyChangesQuery
             ->selectRaw('DATE(date) as day, SUM(amount) as daily_change')
             ->groupBy('day')
             ->pluck('daily_change')
