@@ -96,9 +96,10 @@ trait AuthorizesCorporationAccess
     }
 
     /**
-     * Corporation IDs the authenticated user has a character in. Canonical
-     * resolver for the plugin ecosystem (see project memory on
-     * "Corp ID resolution for a user").
+     * Corporation IDs the authenticated user has a character in. The canonical
+     * corp-access resolver every corp-scoped endpoint gates on. Read from
+     * refresh_tokens (the user's linked characters) joined to
+     * character_affiliations, so it tracks corp moves without a manual sync.
      */
     protected function userCorporationIds(): array
     {

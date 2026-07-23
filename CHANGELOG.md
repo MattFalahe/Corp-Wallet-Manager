@@ -5,6 +5,23 @@ All notable changes to Corp-Wallet-Manager will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [3.0.1] - Corp Financial Pulse (2026-07-24)
+
+A small, backwards-compatible release that exposes a corp-level financial summary so HR Manager (and any other consumer) can answer "how is the corp doing financially" at a glance, alongside the existing per-member contribution analytics, plus a maintenance bump of the PDF renderer.
+
+### Added
+
+- **`wallet.getCorpSummary` PluginBridge capability** (`($corporationId, $months = 6)`). Returns the corporation's live wallet **balance** (summed across divisions from `corporation_wallet_balances`), plus **income / expense / net** over the window and a continuous, zero-filled per-month **trend** series. This is the "is the corp making or losing ISK" view that complements the per-member contribution surfaces. Inter-division transfers are excluded (via `JournalFilters`) so internal shuffling between divisions never inflates the gross income or expense. Returns `['available' => false, 'reason' => 'no_corp_wallet_data']` when the corp has neither a synced balance nor journal rows in the window.
+
+### Changed
+
+- Bumped the `barryvdh/laravel-dompdf` dependency from `^2.0` to `^3.0` (the renderer behind PDF report export). dompdf 3.x keeps the same PHP 8.1+ floor CWM already requires, and CWM's report templates and facade usage are unchanged, so report output is identical. No operator action required.
+
+### Notes
+
+- Backwards-compatible and read-only: no schema changes, no migrations, and no change to any existing capability, event, or table. It reads only already-synced SeAT core wallet tables (`corporation_wallet_balances`, `corporation_wallet_journals`).
+- HR Manager's Corp Health Economy tab consumes this for a new "Financial pulse" strip (shipped separately on the HR side).
+
 ## [3.0.0] - The Ecosystem Era (2026-06-09)
 
 This is the release where Corp Wallet Manager stopped being a standalone wallet tool and became a first-class member of the manager-suite ecosystem. The Discord delivery layer is now built around per-corporation webhooks with role mentions and per-category subscriptions; the per-character contribution cache unlocks Top Contributors, Profit Attribution by Activity, Expense Attribution by Category, and Alliance Tax Reconciliation as a stack of four director-view tabs; scheduling moves from two hardcoded ScheduleSeeder entries to a per-corp UI that operators control directly; and the namespace migration drops the `Seat\` prefix that was blocking Manager Core's plugin bridge from seeing CWM as part of the suite. Cross-plugin integration is the through-line: when Manager Core is installed CWM publishes the wallet and member topics other plugins subscribe to and exposes a fan-out of PluginBridge capabilities; when Mining Manager is installed the contribution classifier uses MM's authoritative `mining_taxes.transaction_id` linkage to split tax payments from voluntary donations; HR Manager consumes the contribution analytics for its member assessment classifier. None of the integrations require a composer dependency, so plugins can be installed and uninstalled in any order without breakage.

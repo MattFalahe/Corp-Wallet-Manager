@@ -124,8 +124,8 @@
        The canonical .help-card h4 / h5 / .text-muted defaults to #9ca3af which
        is hard to read on the 15%-tint backgrounds of .info-box / .warning-box
        / .success-box / .purple-box. Override with chained-class selectors so
-       they win the cascade against Bootstrap's .text-muted. Pattern mirrors
-       Structure Manager + Mining Manager (per feedback_help_docs_visual_design). */
+       they win the cascade against Bootstrap's .text-muted. Same pattern the
+       Structure Manager and Mining Manager help pages use. */
     .help-card .info-box h4,
     .help-card .info-box h5,
     .help-card .warning-box h4,
@@ -352,10 +352,10 @@
                 <p>
                     <strong>{{ trans('corpwalletmanager::help.version') }}:</strong>
                     <span class="badge badge-secondary" style="font-size: 0.9rem; vertical-align: middle;">
-                        v{{ $installedVersion ?? '3.0.0' }}
+                        v{{ $installedVersion ?? '3.0.1' }}
                     </span>
                     <span class="badge" style="background:#667eea; color:#fff; font-size: 0.85rem; vertical-align: middle;">
-                        {{ $releaseTag ?? 'v3.0.0' }} &middot; {{ $releaseCodename ?? 'The Ecosystem Era' }}
+                        {{ $releaseTag ?? 'v3.0.1' }} &middot; {{ $releaseCodename ?? 'Corp Financial Pulse' }}
                     </span>
                     <span class="badge" style="background:#3a4049; color:#cbd5e1; font-size: 0.85rem; vertical-align: middle;">SeAT 5.0</span>
                 </p>

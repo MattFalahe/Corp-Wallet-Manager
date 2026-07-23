@@ -757,6 +757,107 @@ class ContributionService
     }
 
     /**
+     * Corp-level financial summary: live wallet balance + income / expense /
+     * net over a window + a per-month trend. The "is the corp making or losing
+     * ISK" view that complements the per-member contribution surfaces.
+     *
+     * Balance is the live total across wallet divisions (corporation_wallet_balances,
+     * the SeAT-synced figure; needs the corp wallet scope on a director token).
+     * Income / expense are summed from corporation_wallet_journals with
+     * inter-division transfers excluded (JournalFilters) so internal shuffling
+     * between divisions never inflates gross income or expense. The monthly
+     * series is a continuous, zero-filled run of buckets for a clean sparkline.
+     *
+     * Returns ['available' => false, 'reason' => 'no_corp_wallet_data'] when the
+     * corp has neither a synced balance nor any journal rows in the window.
+     *
+     * @param  int  $corporationId
+     * @param  int  $months  window in months (clamped 1..24, default 6)
+     * @return array
+     */
+    public function getCorpSummary(int $corporationId, int $months = 6): array
+    {
+        $months = max(1, min(24, $months));
+        $from   = now()->subMonthsNoOverflow($months - 1)->startOfMonth();
+
+        // Live balance across all wallet divisions (authoritative current figure).
+        $balanceAvailable = Schema::hasTable('corporation_wallet_balances')
+            && DB::table('corporation_wallet_balances')->where('corporation_id', $corporationId)->exists();
+
+        $balance = $balanceAvailable
+            ? (float) DB::table('corporation_wallet_balances')->where('corporation_id', $corporationId)->sum('balance')
+            : 0.0;
+
+        // Income / expense from the journal, inter-division transfers excluded.
+        $rows = collect();
+        if (Schema::hasTable('corporation_wallet_journals')) {
+            $query = DB::table('corporation_wallet_journals')
+                ->where('corporation_id', $corporationId)
+                ->where('date', '>=', $from);
+            $query = JournalFilters::excludeInternalTransfers($query, $corporationId);
+            $rows  = $query->get(['amount', 'date']);
+        }
+
+        if (! $balanceAvailable && $rows->isEmpty()) {
+            return [
+                'available'      => false,
+                'reason'         => 'no_corp_wallet_data',
+                'corporation_id' => $corporationId,
+            ];
+        }
+
+        // Seed a continuous month series so the trend has no gaps.
+        $monthly = [];
+        for ($i = 0; $i < $months; $i++) {
+            $period = $from->copy()->addMonthsNoOverflow($i)->format('Y-m');
+            $monthly[$period] = ['period' => $period, 'income' => 0.0, 'expense' => 0.0, 'net' => 0.0];
+        }
+
+        $incomeTotal  = 0.0;
+        $expenseTotal = 0.0;
+
+        foreach ($rows as $r) {
+            $amount = (float) $r->amount;
+            $period = \Carbon\Carbon::parse($r->date)->format('Y-m');
+
+            if (! isset($monthly[$period])) {
+                $monthly[$period] = ['period' => $period, 'income' => 0.0, 'expense' => 0.0, 'net' => 0.0];
+            }
+
+            if ($amount >= 0) {
+                $monthly[$period]['income'] += $amount;
+                $incomeTotal += $amount;
+            } else {
+                $monthly[$period]['expense'] += abs($amount);
+                $expenseTotal += abs($amount);
+            }
+        }
+
+        ksort($monthly);
+        foreach ($monthly as &$m) {
+            $m['net'] = $m['income'] - $m['expense'];
+        }
+        unset($m);
+
+        $net = $incomeTotal - $expenseTotal;
+
+        return [
+            'available'           => true,
+            'corporation_id'      => $corporationId,
+            'months'              => $months,
+            'balance'             => $balance,
+            'balance_available'   => $balanceAvailable,
+            'income_total'        => $incomeTotal,
+            'expense_total'       => $expenseTotal,
+            'net_total'           => $net,
+            'income_avg_monthly'  => $incomeTotal / $months,
+            'expense_avg_monthly' => $expenseTotal / $months,
+            'net_avg_monthly'     => $net / $months,
+            'monthly'             => array_values($monthly),
+        ];
+    }
+
+    /**
      * Leaderboard of top contributors for a corporation in a period.
      * Used by the Director-view Top Contributors tab AND the member
      * view's leaderboard (both surfaces share this method).

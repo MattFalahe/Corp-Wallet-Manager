@@ -752,7 +752,7 @@ class SettingsController extends Controller
      * with a constant fallback for the rare case where Composer metadata
      * isn't available, e.g. zip-deployed installs). The Help page Version
      * Status block uses this to show the installed version + a link to the
-     * v3.0.0 release notes; no Packagist round-trip, no caching layer
+     * v3.0.1 release notes; no Packagist round-trip, no caching layer
      * needed for a pre-release help page.
      */
     public function help()
@@ -769,9 +769,9 @@ class SettingsController extends Controller
         return view('corpwalletmanager::help.index', [
             'installedVersion' => $installedVersion['version'],
             'installedVersionSource' => $installedVersion['source'],
-            'releaseTag' => 'v3.0.0',
-            'releaseCodename' => 'The Ecosystem Era',
-            'releaseUrl' => 'https://github.com/MattFalahe/Corp-Wallet-Manager/releases/tag/v3.0.0',
+            'releaseTag' => 'v3.0.1',
+            'releaseCodename' => 'Corp Financial Pulse',
+            'releaseUrl' => 'https://github.com/MattFalahe/Corp-Wallet-Manager/releases/tag/3.0.1',
             'versionStatus' => $versionStatus,
         ]);
     }
@@ -854,7 +854,7 @@ class SettingsController extends Controller
             return ['version' => constant('CorpWalletManager\\CWM_VERSION'), 'source' => 'constant'];
         }
 
-        return ['version' => '3.0.0', 'source' => 'fallback'];
+        return ['version' => '3.0.1', 'source' => 'fallback'];
     }
 
     /**

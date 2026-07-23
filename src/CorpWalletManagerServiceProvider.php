@@ -35,7 +35,7 @@ use Illuminate\Support\Facades\Log;
  * truth for the package; this constant exists only so the badge never
  * renders empty.
  */
-const CWM_VERSION = '3.0.0';
+const CWM_VERSION = '3.0.1';
 
 class CorpWalletManagerServiceProvider extends AbstractSeatPlugin
 {
@@ -130,6 +130,15 @@ class CorpWalletManagerServiceProvider extends AbstractSeatPlugin
             $bridge->registerCapability('corp-wallet-manager', 'wallet.getCorpOutflows',
                 fn ($corporationId, $months = 3) =>
                     $contributionService->getCorpOutflows((int) $corporationId, (int) $months)
+            );
+
+            // Corp-level financial summary: live wallet balance + income /
+            // expense / net over a window + per-month trend (inter-division
+            // transfers excluded). Powers HR Manager's Corp Health Economy
+            // "financial pulse" — the "is the corp making or losing ISK" view.
+            $bridge->registerCapability('corp-wallet-manager', 'wallet.getCorpSummary',
+                fn ($corporationId, $months = 6) =>
+                    $contributionService->getCorpSummary((int) $corporationId, (int) $months)
             );
 
             // Corp-wide per-member financial roll-up — EVERY member with
