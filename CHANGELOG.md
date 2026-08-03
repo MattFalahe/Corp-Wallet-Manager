@@ -5,6 +5,14 @@ All notable changes to Corp-Wallet-Manager will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [3.0.2] - Backtest Fix (2026-08-03)
+
+A bug-fix patch.
+
+### Fixed
+
+- **Backtest no longer crashes when it writes a corporation's metrics row first.** `corpwalletmanager_prediction_metrics` holds one row per corp, seeded by two independent jobs: the daily prediction job fills the prediction-quality columns and the backtest job fills the accuracy columns. The prediction-quality columns (`prediction_date`, `data_points_used`, `average_confidence`, `volatility_factor`, `trend_strength`) were created `NOT NULL` with no default, so a backtest that ran for a corp with no metrics row yet failed with `SQLSTATE[HY000] 1364 Field 'prediction_date' doesn't have a default value` and aborted the entire backtest run (not just that corp). A forward-only migration relaxes those five columns to nullable, so either job can seed the row and the other fills its own columns on the next pass. No data is lost and no reconfiguration is needed.
+
 ## [3.0.1] - Corp Financial Pulse (2026-07-24)
 
 A small, backwards-compatible release that exposes a corp-level financial summary so HR Manager (and any other consumer) can answer "how is the corp doing financially" at a glance, alongside the existing per-member contribution analytics, plus a maintenance bump of the PDF renderer.

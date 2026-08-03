@@ -79,7 +79,7 @@ return [
     'version_upgrade_recipe_note'    => 'Bringing the stack fully down (not just restart) clears the default Redis container, which flushes queued background jobs that may carry pre-v3 class FQNs. Container boot pulls the latest plugin via Composer, runs any new migrations, and re-seeds schedules automatically.',
     'version_source_composer'        => "Resolved via Composer's installed.json (preferred).",
     'version_source_constant'        => "Resolved via the CWM_VERSION constant (fallback for non-Composer installs).",
-    'version_source_hint'            => "Installed version comes from Composer's runtime metadata when available; the v3.0.1 release tag is hardcoded. No external HTTP calls.",
+    'version_source_hint'            => "Installed version comes from Composer's runtime metadata when available; the v3.0.2 release tag is hardcoded. No external HTTP calls.",
 
     // ============================================================
     // Welcome (sidebar entry 3)

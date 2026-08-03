@@ -35,7 +35,7 @@ use Illuminate\Support\Facades\Log;
  * truth for the package; this constant exists only so the badge never
  * renders empty.
  */
-const CWM_VERSION = '3.0.1';
+const CWM_VERSION = '3.0.2';
 
 class CorpWalletManagerServiceProvider extends AbstractSeatPlugin
 {

@@ -352,10 +352,10 @@
                 <p>
                     <strong>{{ trans('corpwalletmanager::help.version') }}:</strong>
                     <span class="badge badge-secondary" style="font-size: 0.9rem; vertical-align: middle;">
-                        v{{ $installedVersion ?? '3.0.1' }}
+                        v{{ $installedVersion ?? '3.0.2' }}
                     </span>
                     <span class="badge" style="background:#667eea; color:#fff; font-size: 0.85rem; vertical-align: middle;">
-                        {{ $releaseTag ?? 'v3.0.1' }} &middot; {{ $releaseCodename ?? 'Corp Financial Pulse' }}
+                        {{ $releaseTag ?? 'v3.0.2' }} &middot; {{ $releaseCodename ?? 'Backtest Fix' }}
                     </span>
                     <span class="badge" style="background:#3a4049; color:#cbd5e1; font-size: 0.85rem; vertical-align: middle;">SeAT 5.0</span>
                 </p>
