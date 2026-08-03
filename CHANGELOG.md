@@ -5,9 +5,13 @@ All notable changes to Corp-Wallet-Manager will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [3.0.2] - Backtest Fix (2026-08-03)
+## [3.0.2] - Planetary Tax (2026-08-03)
 
-A bug-fix patch.
+Adds a Planetary Interaction customs-tax breakdown by solar system, plus a backtest crash fix.
+
+### Added
+
+- **Planetary Tax by System** (Director view). A new tab breaking the corp's PI customs tax (POCO import + export duty) down by solar system: which systems generate the income, the import vs export split, share of the PI total, and month-over-month change, with each system expandable to its planets (per-POCO detail). Tax rows are resolved to their planet's solar system through the SDE (`mapDenormalize`). An import-vs-export trend chart sits above the table with a selectable window (30 / 90 / 180 days / 1 year, buckets auto-scaling from daily to monthly); it stays two-series on purpose so it reads cleanly no matter how many systems a corp taxes. Read-only over already-synced wallet data, no new ESI scope.
 
 ### Fixed
 

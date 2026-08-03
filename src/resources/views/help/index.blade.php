@@ -355,7 +355,7 @@
                         v{{ $installedVersion ?? '3.0.2' }}
                     </span>
                     <span class="badge" style="background:#667eea; color:#fff; font-size: 0.85rem; vertical-align: middle;">
-                        {{ $releaseTag ?? 'v3.0.2' }} &middot; {{ $releaseCodename ?? 'Backtest Fix' }}
+                        {{ $releaseTag ?? 'v3.0.2' }} &middot; {{ $releaseCodename ?? 'Planetary Tax' }}
                     </span>
                     <span class="badge" style="background:#3a4049; color:#cbd5e1; font-size: 0.85rem; vertical-align: middle;">SeAT 5.0</span>
                 </p>

@@ -72,6 +72,11 @@
                     </a>
                 </li>
                 <li class="nav-item">
+                    <a class="nav-link" href="#planetary-tax" data-toggle="tab">
+                        <i class="fas fa-globe"></i> Planetary Tax
+                    </a>
+                </li>
+                <li class="nav-item">
                     <a class="nav-link" href="#alliance-tax" data-toggle="tab">
                         <i class="fas fa-balance-scale"></i> Alliance Tax
                     </a>
@@ -1151,6 +1156,102 @@
                     </div>
                 </div>
                 <!-- End Expense Attribution Tab -->
+
+                <!-- Planetary Tax Tab -->
+                <div class="tab-pane fade" id="planetary-tax" role="tabpanel">
+                    <h4 class="mt-3"><i class="fas fa-globe"></i> Planetary Tax by System</h4>
+                    <p class="text-muted">
+                        Which solar systems generate the corp's Planetary Interaction customs tax (POCO import + export duty). Each tax row is resolved to its planet's solar system via the SDE. The import-vs-export chart shows the trend over your chosen window; the per-system table below expands to per-planet (per-POCO) detail.
+                    </p>
+                    <div class="row mb-3">
+                        <div class="col-md-4">
+                            <label for="cwm-pt-period">Period (Breakdown Table)</label>
+                            <select id="cwm-pt-period" class="form-control"></select>
+                        </div>
+                        <div class="col-md-4">
+                            <label for="cwm-pt-trend-days">Trend Window (Chart)</label>
+                            <select id="cwm-pt-trend-days" class="form-control">
+                                <option value="30">Last 30 days</option>
+                                <option value="90" selected>Last 90 days</option>
+                                <option value="180">Last 180 days</option>
+                                <option value="365">Last year</option>
+                            </select>
+                        </div>
+                    </div>
+
+                    <div class="row">
+                        <div class="col-md-4">
+                            <div class="info-box mb-2">
+                                <span class="info-box-icon bg-success"><i class="fas fa-globe"></i></span>
+                                <div class="info-box-content">
+                                    <span class="info-box-text">Total PI Tax This Period</span>
+                                    <span class="info-box-number" id="cwm-pt-total">Loading...</span>
+                                    <small id="cwm-pt-trend"></small>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="col-md-4">
+                            <div class="info-box mb-2">
+                                <span class="info-box-icon bg-info"><i class="fas fa-arrow-down"></i></span>
+                                <div class="info-box-content">
+                                    <span class="info-box-text">Import Duty</span>
+                                    <span class="info-box-number" id="cwm-pt-import">Loading...</span>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="col-md-4">
+                            <div class="info-box mb-2">
+                                <span class="info-box-icon bg-primary"><i class="fas fa-arrow-up"></i></span>
+                                <div class="info-box-content">
+                                    <span class="info-box-text">Export Duty</span>
+                                    <span class="info-box-number" id="cwm-pt-export">Loading...</span>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="card card-dark mt-1">
+                        <div class="card-header">
+                            <h3 class="card-title"><i class="fas fa-chart-line"></i> Import vs Export Tax Over Time</h3>
+                        </div>
+                        <div class="card-body">
+                            <p class="text-muted small mb-2">
+                                Corp-wide PI import and export duty over the selected window. Buckets scale automatically (daily up to a month, weekly up to 180 days, monthly for a year). Deliberately not split by system, so it stays readable however many systems you tax; the per-system split is in the table below.
+                            </p>
+                            <div class="cwm-trend-wrapper" style="position: relative; height: 360px;">
+                                <canvas id="cwm-pt-trend-chart" style="display: block; width: 100% !important; height: 100% !important;"></canvas>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="card card-dark mt-3">
+                        <div class="card-header">
+                            <h3 class="card-title"><i class="fas fa-table"></i> Per-System Breakdown</h3>
+                            <div class="card-tools"><small class="text-muted">Click a system to expand its planets</small></div>
+                        </div>
+                        <div class="card-body p-0">
+                            <div class="table-responsive">
+                                <table class="table table-striped mb-0" id="cwm-pt-table">
+                                    <thead>
+                                        <tr>
+                                            <th>System</th>
+                                            <th class="text-right" title="Security status">Sec</th>
+                                            <th class="text-right">Import</th>
+                                            <th class="text-right">Export</th>
+                                            <th class="text-right">Total</th>
+                                            <th class="text-right">% of PI</th>
+                                            <th class="text-right" title="Change vs the prior calendar month for this system">vs Prior</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody>
+                                        <tr><td colspan="7" class="text-center text-muted">Select a period to load.</td></tr>
+                                    </tbody>
+                                </table>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                <!-- End Planetary Tax Tab -->
 
                 <!-- Alliance Tax Tab -->
                 <div class="tab-pane fade" id="alliance-tax" role="tabpanel">
@@ -5133,6 +5234,262 @@ document.addEventListener('DOMContentLoaded', function() {
         if (cwmEaTrendChart) {
             cwmEnsureTrendChartHeight(document.getElementById('cwm-ea-trend-chart'), cwmEaTrendChart);
         }
+    });
+})();
+
+// ---- Planetary Tax tab ----
+//
+// Per-system PI customs-tax breakdown (table + per-planet drill-down)
+// plus an import-vs-export trend chart with a day-window selector. The
+// chart is import/export only (two series) so it stays readable no
+// matter how many systems the corp taxes; the per-system split lives in
+// the table. Own IIFE + own cwmFormatISK copy, same as the other tabs.
+(function () {
+    function cwmFormatISK(amount) {
+        var n = Number(amount || 0);
+        if (n >= 1e9) return (n / 1e9).toFixed(2) + ' B ISK';
+        if (n >= 1e6) return (n / 1e6).toFixed(2) + ' M ISK';
+        if (n >= 1e3) return (n / 1e3).toFixed(2) + ' K ISK';
+        return n.toFixed(2) + ' ISK';
+    }
+
+    function cwmEscape(str) {
+        return String(str == null ? '' : str).replace(/[&<>"']/g, function (c) {
+            return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c];
+        });
+    }
+
+    function cwmFmtSec(sec) {
+        if (sec === null || sec === undefined) return '—';
+        return (+sec).toFixed(1);
+    }
+
+    var cwmPtTrendChart = null;
+    var cwmPtLoaded = false;
+
+    function cwmEnsurePtTrendHeight(canvas, chart) {
+        if (!canvas) return;
+        var wrapper = canvas.parentElement;
+        if (!wrapper) return;
+        requestAnimationFrame(function () {
+            canvas.style.height = (wrapper.clientHeight || 360) + 'px';
+            canvas.style.width = '100%';
+            if (chart && typeof chart.resize === 'function') chart.resize();
+        });
+    }
+
+    function cwmInitPtControls() {
+        var sel = document.getElementById('cwm-pt-period');
+        if (sel && sel.options.length === 0) {
+            var now = new Date();
+            for (var i = 0; i < 12; i++) {
+                var d = new Date(now.getFullYear(), now.getMonth() - i, 1);
+                var period = d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0');
+                var opt = document.createElement('option');
+                opt.value = period;
+                opt.textContent = d.toLocaleString('default', { month: 'long', year: 'numeric' });
+                sel.appendChild(opt);
+            }
+            sel.addEventListener('change', function () { cwmLoadPlanetaryTax(sel.value); });
+        }
+        var daysSel = document.getElementById('cwm-pt-trend-days');
+        if (daysSel && !daysSel.dataset.bound) {
+            daysSel.dataset.bound = '1';
+            daysSel.addEventListener('change', function () {
+                cwmLoadPlanetaryTaxTrend(parseInt(daysSel.value, 10) || 90);
+            });
+        }
+    }
+
+    function cwmLoadPlanetaryTax(period) {
+        var tbody = document.querySelector('#cwm-pt-table tbody');
+        var totalEl = document.getElementById('cwm-pt-total');
+        var importEl = document.getElementById('cwm-pt-import');
+        var exportEl = document.getElementById('cwm-pt-export');
+        var trendEl = document.getElementById('cwm-pt-trend');
+        if (!tbody) return;
+        tbody.innerHTML = '<tr><td colspan="7" class="text-center text-muted"><i class="fas fa-spinner fa-spin"></i> Loading...</td></tr>';
+        if (totalEl) totalEl.textContent = 'Loading...';
+        if (importEl) importEl.textContent = 'Loading...';
+        if (exportEl) exportEl.textContent = 'Loading...';
+        if (trendEl) trendEl.textContent = '';
+
+        fetch(window.location.origin + '/corp-wallet-manager/api/analytics/planetary-tax?period=' + encodeURIComponent(period))
+            .then(function (r) { return r.json(); })
+            .then(function (data) {
+                if (!data.success) {
+                    tbody.innerHTML = '<tr><td colspan="7" class="text-center text-muted">' + (data.message || 'Failed to load.') + '</td></tr>';
+                    if (totalEl) totalEl.textContent = '—';
+                    if (importEl) importEl.textContent = '—';
+                    if (exportEl) exportEl.textContent = '—';
+                    return;
+                }
+
+                if (importEl) importEl.textContent = cwmFormatISK(data.total_import || 0);
+                if (exportEl) exportEl.textContent = cwmFormatISK(data.total_export || 0);
+                if (totalEl) totalEl.textContent = cwmFormatISK(data.total || 0);
+                if (trendEl) {
+                    if (data.prior_total > 0) {
+                        var pct = ((data.total - data.prior_total) / data.prior_total) * 100;
+                        var arrow = pct >= 0 ? '↑' : '↓';
+                        var cls = pct >= 0 ? 'text-success' : 'text-danger';
+                        trendEl.innerHTML = '<span class="' + cls + '">' + arrow + ' ' + Math.abs(pct).toFixed(1) + '% vs last month</span>';
+                    } else {
+                        trendEl.textContent = '';
+                    }
+                }
+
+                if (!data.by_system || data.by_system.length === 0 || (data.total || 0) <= 0) {
+                    tbody.innerHTML = '<tr><td colspan="7" class="text-center text-muted">No planetary tax for this period.</td></tr>';
+                    return;
+                }
+                cwmRenderPtTable(data.by_system, tbody);
+            })
+            .catch(function () {
+                tbody.innerHTML = '<tr><td colspan="7" class="text-center text-muted">Failed to load.</td></tr>';
+                if (totalEl) totalEl.textContent = '—';
+                if (importEl) importEl.textContent = '—';
+                if (exportEl) exportEl.textContent = '—';
+            });
+    }
+
+    function cwmRenderPtTable(systems, tbody) {
+        var html = '';
+        systems.forEach(function (s, idx) {
+            var trendCell;
+            if (s.trend_vs_prior_pct === null || s.trend_vs_prior_pct === undefined) {
+                trendCell = '<small class="text-muted">— (no prior)</small>';
+            } else {
+                var pct = +s.trend_vs_prior_pct;
+                var cls = Math.abs(pct) < 0.5 ? 'text-muted' : (pct > 0 ? 'text-success' : 'text-danger');
+                var sign = pct > 0 ? '+' : '';
+                trendCell = '<span class="' + cls + '">' + sign + pct.toFixed(1) + '%</span>';
+            }
+
+            var hasPlanets = s.planets && s.planets.length > 0;
+            var caret = hasPlanets
+                ? '<i class="fas fa-caret-right cwm-pt-caret" style="margin-right:6px;"></i>'
+                : '<span style="display:inline-block; width:14px;"></span>';
+
+            html += '<tr class="cwm-pt-system-row" data-sys="' + idx + '"' + (hasPlanets ? ' style="cursor:pointer;"' : '') + '>'
+                + '<td>' + caret + '<strong>' + cwmEscape(s.system) + '</strong></td>'
+                + '<td class="text-right">' + cwmFmtSec(s.security) + '</td>'
+                + '<td class="text-right">' + cwmFormatISK(s.import_tax) + '</td>'
+                + '<td class="text-right">' + cwmFormatISK(s.export_tax) + '</td>'
+                + '<td class="text-right"><strong>' + cwmFormatISK(s.total) + '</strong></td>'
+                + '<td class="text-right">' + (+s.pct_of_total).toFixed(1) + '%</td>'
+                + '<td class="text-right">' + trendCell + '</td>'
+                + '</tr>';
+
+            (s.planets || []).forEach(function (p) {
+                html += '<tr class="cwm-pt-planet-row cwm-pt-planet-' + idx + '" style="display:none; background:rgba(148,163,184,0.06);">'
+                    + '<td style="padding-left:34px;"><i class="fas fa-circle" style="font-size:6px; margin-right:8px; vertical-align:middle; opacity:0.5;"></i>' + cwmEscape(p.planet) + '</td>'
+                    + '<td></td>'
+                    + '<td class="text-right">' + cwmFormatISK(p.import_tax) + '</td>'
+                    + '<td class="text-right">' + cwmFormatISK(p.export_tax) + '</td>'
+                    + '<td class="text-right">' + cwmFormatISK(p.total) + '</td>'
+                    + '<td></td><td></td>'
+                    + '</tr>';
+            });
+        });
+        tbody.innerHTML = html;
+
+        Array.prototype.forEach.call(tbody.querySelectorAll('.cwm-pt-system-row'), function (row) {
+            row.addEventListener('click', function () {
+                var idx = row.getAttribute('data-sys');
+                var caret = row.querySelector('.cwm-pt-caret');
+                var planetRows = tbody.querySelectorAll('.cwm-pt-planet-' + idx);
+                var showing = false;
+                Array.prototype.forEach.call(planetRows, function (pr) {
+                    var vis = pr.style.display !== 'none';
+                    pr.style.display = vis ? 'none' : '';
+                    showing = !vis;
+                });
+                if (caret) caret.className = 'fas fa-caret-' + (showing ? 'down' : 'right') + ' cwm-pt-caret';
+            });
+        });
+    }
+
+    function cwmDestroyPtTrendChart() {
+        if (cwmPtTrendChart) { cwmPtTrendChart.destroy(); cwmPtTrendChart = null; }
+    }
+
+    function cwmLoadPlanetaryTaxTrend(days) {
+        var canvas = document.getElementById('cwm-pt-trend-chart');
+        if (!canvas) return;
+        days = days || 90;
+        fetch(window.location.origin + '/corp-wallet-manager/api/analytics/planetary-tax-trend?days=' + encodeURIComponent(days))
+            .then(function (r) { return r.json(); })
+            .then(function (data) {
+                if (!data.success || !data.labels || data.labels.length === 0) {
+                    cwmDestroyPtTrendChart();
+                    return;
+                }
+                try { cwmRenderPtTrendChart(canvas, data); }
+                catch (e) { console.error('Planetary tax trend render failed:', e); }
+            })
+            .catch(function () { cwmDestroyPtTrendChart(); });
+    }
+
+    function cwmRenderPtTrendChart(canvas, data) {
+        if (typeof Chart === 'undefined') return;
+        var datasets = [
+            {
+                label: 'Import Duty',
+                data: data.import,
+                borderColor: 'rgba(6, 182, 212, 0.9)',
+                backgroundColor: 'rgba(6, 182, 212, 0.15)',
+                pointRadius: 3, pointHoverRadius: 6, borderWidth: 2, tension: 0.25, fill: true, spanGaps: true,
+            },
+            {
+                label: 'Export Duty',
+                data: data.export,
+                borderColor: 'rgba(124, 58, 237, 0.9)',
+                backgroundColor: 'rgba(124, 58, 237, 0.15)',
+                pointRadius: 3, pointHoverRadius: 6, borderWidth: 2, tension: 0.25, fill: true, spanGaps: true,
+            },
+        ];
+
+        cwmDestroyPtTrendChart();
+        cwmPtTrendChart = new Chart(canvas.getContext('2d'), {
+            type: 'line',
+            data: { labels: data.labels, datasets: datasets },
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                interaction: { mode: 'index', intersect: false },
+                plugins: {
+                    legend: { position: 'top', labels: { color: '#cbd5e1', usePointStyle: true } },
+                    tooltip: {
+                        callbacks: {
+                            label: function (ctx) { return ctx.dataset.label + ': ' + cwmFormatISK(ctx.parsed.y); },
+                        },
+                    },
+                },
+                scales: {
+                    x: {
+                        ticks: { color: '#94a3b8', maxRotation: 0, autoSkip: true, autoSkipPadding: 12 },
+                        grid: { color: 'rgba(148, 163, 184, 0.1)' },
+                    },
+                    y: {
+                        beginAtZero: true,
+                        ticks: { color: '#94a3b8', callback: function (v) { return cwmFormatISK(v); } },
+                        grid: { color: 'rgba(148, 163, 184, 0.1)' },
+                    },
+                },
+            },
+        });
+
+        cwmEnsurePtTrendHeight(canvas, cwmPtTrendChart);
+    }
+
+    $(document).on('shown.bs.tab', 'a[href="#planetary-tax"]', function () {
+        if (!cwmPtLoaded) { cwmInitPtControls(); cwmPtLoaded = true; }
+        var sel = document.getElementById('cwm-pt-period');
+        if (sel && sel.value) cwmLoadPlanetaryTax(sel.value);
+        var daysSel = document.getElementById('cwm-pt-trend-days');
+        cwmLoadPlanetaryTaxTrend(daysSel ? (parseInt(daysSel.value, 10) || 90) : 90);
+        if (cwmPtTrendChart) cwmEnsurePtTrendHeight(document.getElementById('cwm-pt-trend-chart'), cwmPtTrendChart);
     });
 })();
 

@@ -770,7 +770,7 @@ class SettingsController extends Controller
             'installedVersion' => $installedVersion['version'],
             'installedVersionSource' => $installedVersion['source'],
             'releaseTag' => 'v3.0.2',
-            'releaseCodename' => 'Backtest Fix',
+            'releaseCodename' => 'Planetary Tax',
             'releaseUrl' => 'https://github.com/MattFalahe/Corp-Wallet-Manager/releases/tag/3.0.2',
             'versionStatus' => $versionStatus,
         ]);
