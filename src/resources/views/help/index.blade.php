@@ -590,6 +590,11 @@
                         <p>{{ trans('corpwalletmanager::help.kf_alliance_tax_body') }}</p>
                     </div>
                     <div class="feature-item">
+                        <i class="fas fa-globe"></i>
+                        <h5>{{ trans('corpwalletmanager::help.kf_planetary_tax_title') }}</h5>
+                        <p>{{ trans('corpwalletmanager::help.kf_planetary_tax_body') }}</p>
+                    </div>
+                    <div class="feature-item">
                         <i class="fab fa-discord"></i>
                         <h5>{{ trans('corpwalletmanager::help.kf_webhooks_title') }}</h5>
                         <p>{{ trans('corpwalletmanager::help.kf_webhooks_body') }}</p>
@@ -779,6 +784,14 @@
                     <p><strong>{{ trans('corpwalletmanager::help.features') }}:</strong></p>
                     {!! trans('corpwalletmanager::help.alliance_tax_tab_features') !!}
                     <p><strong>{{ trans('corpwalletmanager::help.best_for') }}:</strong> {{ trans('corpwalletmanager::help.alliance_tax_tab_best') }}</p>
+                </div>
+
+                <div class="tab-explanation">
+                    <h5><i class="fas fa-globe"></i> {{ trans('corpwalletmanager::help.planetary_tax_tab_title') }}</h5>
+                    <p><strong>{{ trans('corpwalletmanager::help.purpose') }}:</strong> {!! trans('corpwalletmanager::help.planetary_tax_tab_purpose') !!}</p>
+                    <p><strong>{{ trans('corpwalletmanager::help.features') }}:</strong></p>
+                    {!! trans('corpwalletmanager::help.planetary_tax_tab_features') !!}
+                    <p><strong>{{ trans('corpwalletmanager::help.best_for') }}:</strong> {{ trans('corpwalletmanager::help.planetary_tax_tab_best') }}</p>
                 </div>
 
                 <div class="info-box">

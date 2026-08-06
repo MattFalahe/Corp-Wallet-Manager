@@ -507,6 +507,7 @@ class DiagnosticController extends Controller
             $this->validatePermissionsAssigned(),
             $this->validateWebhookUrls(),
             $this->validateWatermarks(),
+            $this->validateSdePresent(),
         ];
     }
 
@@ -567,6 +568,23 @@ class DiagnosticController extends Controller
             : 'pass';
 
         return $this->result($status, 'Job watermarks', implode(' / ', $parts));
+    }
+
+    private function validateSdePresent(): array
+    {
+        // mapDenormalize is the SeAT SDE table the Planetary Tax tab uses to
+        // resolve each POCO tax row's planet to its solar system. Without it
+        // that tab still works but shows every system as "Unknown System".
+        if (! Schema::hasTable('mapDenormalize')) {
+            return $this->result('warn', 'SDE (mapDenormalize)', 'Not present - the Planetary Tax tab shows every system as "Unknown System". Import the SeAT SDE.');
+        }
+
+        $count = DB::table('mapDenormalize')->count();
+        if ($count === 0) {
+            return $this->result('warn', 'SDE (mapDenormalize)', 'Present but empty - Planetary Tax system resolution will be blank. Re-run the SeAT SDE import.');
+        }
+
+        return $this->result('pass', 'SDE (mapDenormalize)', number_format($count) . ' celestials loaded - Planetary Tax can resolve systems.');
     }
 
     // ------------------------------------------------------------------

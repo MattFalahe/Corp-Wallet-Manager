@@ -21,7 +21,7 @@ When Manager Core is installed, CWM publishes seven wallet and member topics to 
 
 ### 📊 Director Analytics
 
-Four director-view tabs answer the operator's most common questions about corp finances, backed by a per-character contribution cache that classifies every journal row into a per-member bucket.
+Five director-view tabs answer the operator's most common questions about corp finances.
 
 | Tab | Question it answers |
 |-----|---------------------|
@@ -29,6 +29,7 @@ Four director-view tabs answer the operator's most common questions about corp f
 | **Profit Attribution by Activity** | What activity drove the corp's profit this period? Pie chart of per-activity share, per-activity efficiency table (total, members, avg per member, percent of profit, trend), and a multi-line trailing-months trend. |
 | **Expense Attribution by Category** | Where did the corp's ISK go? A hardcoded nine-category taxonomy that survives across CCP ref_type drift (Alliance Tax, Corp Withdrawal, Market Fees, Office Rental, Industry Costs, Contracts, Structure & Sovereignty, Insurance & War, Other). Pie, per-category table, and a click-to-toggle multi-line trend. |
 | **Alliance Tax Reconciliation** | Is the corp's alliance remit math right? Expected (per-bucket income times per-bucket rate) vs actual (outgoing payments matching configured recipient IDs or description keywords) over the trailing 3 / 6 / 12 months, with a per-month detail table flagging overpaid and underpaid gaps. |
+| **Planetary Tax by System** | Which systems generate the corp's PI customs tax? Per-system breakdown of POCO import + export duty (each tax row resolved to its planet's solar system via the SDE), with the import/export split, share of the total, month-over-month change, and a per-planet drill-down. An import-vs-export trend chart offers 30 / 90 / 180 day / 1 year windows and stays readable no matter how many systems you tax. |
 
 ### 👤 Member-Facing Surface
 

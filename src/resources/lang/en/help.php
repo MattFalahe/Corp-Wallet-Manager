@@ -226,6 +226,9 @@ return [
     'kf_alliance_tax_title' => 'Alliance Tax Reconciliation',
     'kf_alliance_tax_body'  => 'Compares expected (per-bucket rate math) vs actual (outgoing payments matching configured recipient IDs or keywords) over the trailing 3 / 6 / 12 months. Per-month detail table flags overpaid / underpaid gaps.',
 
+    'kf_planetary_tax_title' => 'Planetary Tax by System',
+    'kf_planetary_tax_body'  => 'Breaks the corp PI customs tax (POCO import + export duty) down by solar system: which systems earn it, import vs export, share of the total, and month-over-month, with a per-planet drill-down. Import-vs-export trend chart over 30 / 90 / 180 day / 1 year windows.',
+
     'kf_webhooks_title' => 'Per-Corp Discord Webhooks',
     'kf_webhooks_body'  => 'Any number of webhooks per corp, each with its own role mention, choice of report types, and choice of alert types. Per-webhook delivery health tracking. Notification Routing Map surfaces silent categories.',
 
@@ -368,7 +371,7 @@ return [
 
     // Director Tabs
     'director_tabs_title' => 'Director View - Tab Guide',
-    'director_tabs_intro' => 'The Director View provides comprehensive financial oversight through nine specialised tabs: Overview, Analytics, Trends, Performance, Cash Flow, Reports, plus three new in v3.0.0 - Top Contributors, Profit Attribution, and Alliance Tax. Each tab offers unique insights and tools for managing your corporation\'s finances.',
+    'director_tabs_intro' => 'The Director View provides comprehensive financial oversight through a set of specialised tabs: Overview, Analytics, Trends, Performance, Cash Flow, and Reports, plus the analytics tabs Top Contributors, Profit Attribution, Expense Attribution, Alliance Tax, and Planetary Tax. Each tab offers unique insights and tools for managing your corporation\'s finances.',
 
     'purpose' => 'Purpose',
     'features' => 'Features',
@@ -468,6 +471,16 @@ return [
         <li>Keyword matching is case-insensitive and contains-based with LIKE wildcards properly escaped, so a literal <code>%</code> in a memo does not become a wildcard.</li>
     </ul>',
     'alliance_tax_tab_best' => 'Auditing alliance remittance, catching missed payments, validating per-bucket rates against actual outflows',
+
+    'planetary_tax_tab_title' => 'Planetary Tax by System',
+    'planetary_tax_tab_purpose' => 'Shows which solar systems generate the corporation\'s Planetary Interaction customs tax (POCO import + export duty). Each tax row is resolved to its planet\'s solar system through the SDE, so you can see where the PI income actually comes from instead of just the corp-wide total.',
+    'planetary_tax_tab_features' => '<ul>
+        <li><strong>Per-system table</strong>: import duty, export duty, total, share of the PI total, and month-over-month change per system. Click a system to expand its planets (per-POCO detail).</li>
+        <li><strong>Summary tiles</strong>: total PI tax this period with an up / down change vs last month, plus the import and export split.</li>
+        <li><strong>Import vs export trend chart</strong>: a selectable window (30 / 90 / 180 days / 1 year) with buckets that auto-scale from daily to monthly. Two series (import + export), not per-system, so it stays readable however many systems you tax.</li>
+        <li><strong>No setup</strong>: reads the wallet journal and the SDE live, so there is nothing to backfill or schedule.</li>
+    </ul>',
+    'planetary_tax_tab_best' => 'Spotting which systems and planets drive PI income, tracking import vs export trends, and prioritising POCO placement',
 
     'data_refresh' => 'Data Refresh',
     'data_refresh_desc' => 'Most tabs refresh automatically every 5 minutes. Manual refresh buttons are available on each tab for immediate updates. The refresh rate can be configured in Settings. Top Contributors / Profit Attribution / Alliance Tax lazy-load on tab open and re-query when the period selector changes.',
