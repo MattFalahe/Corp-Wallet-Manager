@@ -11,7 +11,7 @@ Adds a Planetary Interaction customs-tax breakdown by solar system, plus a backt
 
 ### Added
 
-- **Planetary Tax by System** (Director view). A new tab breaking the corp's PI customs tax (POCO import + export duty) down by solar system: which systems generate the income, the import vs export split, share of the PI total, and month-over-month change, with each system expandable to its planets (per-POCO detail). Tax rows are resolved to their planet's solar system through the SDE (`mapDenormalize`). An import-vs-export trend chart sits above the table with a selectable window (30 / 90 / 180 days / 1 year, buckets auto-scaling from daily to monthly); it stays two-series on purpose so it reads cleanly no matter how many systems a corp taxes. Read-only over already-synced wallet data, no new ESI scope.
+- **Planetary Tax by System** (Director view). A new tab breaking the corp's PI customs tax (POCO import + export duty) down by solar system: which systems generate the income, the import vs export split, share of the PI total, and month-over-month change, with each system expandable to its planets (per-POCO detail). Tax rows are resolved to their planet's solar system through the SDE (`mapDenormalize`). An import-vs-export trend chart sits above the table with a selectable window (30 / 90 / 180 days / 1 year, buckets auto-scaling from daily to monthly); it stays two-series on purpose so it reads cleanly no matter how many systems a corp taxes. The same per-system breakdown also flows into the monthly / quarterly / annual reports (PDF + CSV) and the Discord report embed. Read-only over already-synced wallet data, no new ESI scope.
 
 ### Fixed
 

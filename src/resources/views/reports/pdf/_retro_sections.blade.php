@@ -176,6 +176,38 @@
     </table>
 @endif
 
+{{-- Planetary Tax by System (v3.0.2 retrofit) --}}
+@if(! empty($data['planetary_tax']['by_system']))
+    @php $pt = $data['planetary_tax']; @endphp
+    <h2>Planetary Tax by System</h2>
+    <p class="muted">Total PI customs tax in this period: {{ number_format((float) ($pt['total'] ?? 0), 2) }} ISK (import {{ number_format((float) ($pt['total_import'] ?? 0), 2) }}, export {{ number_format((float) ($pt['total_export'] ?? 0), 2) }}).</p>
+    <table>
+        <thead>
+            <tr>
+                <th>System</th>
+                <th class="num">Sec</th>
+                <th class="num">Import (ISK)</th>
+                <th class="num">Export (ISK)</th>
+                <th class="num">Total (ISK)</th>
+                <th class="num">% of PI</th>
+            </tr>
+        </thead>
+        <tbody>
+            @foreach($pt['by_system'] as $row)
+                @php $row = (array) $row; @endphp
+                <tr>
+                    <td>{{ $row['system'] ?? '' }}</td>
+                    <td class="num">{{ $row['security'] === null ? '-' : number_format((float) $row['security'], 1) }}</td>
+                    <td class="num">{{ number_format((float) ($row['import_tax'] ?? 0), 2) }}</td>
+                    <td class="num">{{ number_format((float) ($row['export_tax'] ?? 0), 2) }}</td>
+                    <td class="num">{{ number_format((float) ($row['total'] ?? 0), 2) }}</td>
+                    <td class="num">{{ number_format((float) ($row['pct_of_total'] ?? 0), 1) }}%</td>
+                </tr>
+            @endforeach
+        </tbody>
+    </table>
+@endif
+
 {{-- Notable Transactions --}}
 @if(! empty($data['notable_transactions']['incoming']) || ! empty($data['notable_transactions']['outgoing']))
     <h2>Notable Transactions</h2>

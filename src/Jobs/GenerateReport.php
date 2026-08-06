@@ -14,6 +14,7 @@ use CorpWalletManager\Services\WebhookService;
 use CorpWalletManager\Services\ContributionService;
 use CorpWalletManager\Services\AllianceTaxService;
 use CorpWalletManager\Services\ExpenseAttributionService;
+use CorpWalletManager\Services\PlanetaryTaxService;
 use CorpWalletManager\Services\AnomalyReportService;
 use CorpWalletManager\Services\EntityNameResolver;
 use CorpWalletManager\Support\JournalFilters;
@@ -217,6 +218,7 @@ class GenerateReport implements ShouldQueue
         $data['transaction_breakdown']  = $this->getTransactionBreakdown();
         $data['activity_breakdown']     = $this->getActivityBreakdown();
         $data['expense_attribution']    = $this->getExpenseAttributionForRange();
+        $data['planetary_tax']          = $this->getPlanetaryTaxForRange();
         $data['notable_transactions']   = $this->getNotableTransactions(10);
         $data['alliance_tax_remit']     = $this->getAllianceTaxRemit();
         $data['alliance_tax_expected']  = $this->getAllianceTaxExpectedForRange();
@@ -290,6 +292,7 @@ class GenerateReport implements ShouldQueue
         $data['member_milestones']     = $this->getMemberMilestonesReached();
         $data['prior_period']          = $this->getPriorPeriodComparison();
         $data['expense_attribution']   = $this->getExpenseAttributionForRange();
+        $data['planetary_tax']         = $this->getPlanetaryTaxForRange();
         $data['alliance_tax_expected'] = $this->getAllianceTaxExpectedForRange();
         $data['mm_compliance']         = $this->getMmComplianceForRange();
         $data['anomaly_summary']       = $this->getAnomalySummaryForRange();
@@ -1372,6 +1375,25 @@ class GenerateReport implements ShouldQueue
     }
 
     /**
+     * Planetary Interaction customs tax broken down by solar system over
+     * the report range. Reuses PlanetaryTaxService::getForRange so the
+     * director tab and the report agree on the numbers. Returns null on
+     * failure so the rest of the report still generates.
+     */
+    protected function getPlanetaryTaxForRange(): ?array
+    {
+        try {
+            return app(PlanetaryTaxService::class)
+                ->getForRange((int) $this->corporationId, $this->dateFrom(), $this->dateTo());
+        } catch (\Throwable $e) {
+            Log::warning('[CWM] Retrospective: planetary tax failed', [
+                'error' => $e->getMessage(),
+            ]);
+            return null;
+        }
+    }
+
+    /**
      * Per-bucket × rate alliance tax expected over the report range
      * (the math the director-view Alliance Tax tab does for each month,
      * collapsed to a single range total). Paired in the template with
@@ -1868,16 +1890,32 @@ class GenerateReport implements ShouldQueue
         $taxExpected     = $reportData['alliance_tax_expected'] ?? null;
         $anomalies       = $reportData['anomaly_summary']     ?? null;
         $expenses        = $reportData['expense_attribution'] ?? null;
+        $planetary       = $reportData['planetary_tax']       ?? null;
 
         $hasAny = ! empty($topContributors)
             || ! empty($activity['buckets'])
             || ! empty($taxRemit['has_match_rules'])
             || ! empty($taxExpected)
             || ! empty($anomalies)
-            || ! empty($expenses['by_category']);
+            || ! empty($expenses['by_category'])
+            || ! empty($planetary['by_system']);
 
         if (! $hasAny) {
             return;
+        }
+
+        // Planetary tax: corp-wide total + the top system, compact.
+        if (! empty($planetary['by_system'])) {
+            $lines = ['Total: ' . $this->formatIskShort((float) ($planetary['total'] ?? 0))];
+            $topSystem = $planetary['by_system'][0] ?? null;
+            if ($topSystem) {
+                $lines[] = sprintf('Top: %s (%s)', $topSystem['system'] ?? '?', $this->formatIskShort((float) ($topSystem['total'] ?? 0)));
+            }
+            $embed['fields'][] = [
+                'name'   => '🪐 Planetary Tax',
+                'value'  => implode("\n", $lines),
+                'inline' => true,
+            ];
         }
 
         // Top 3 contributors as `Name (pct%)` — the pct here is each
