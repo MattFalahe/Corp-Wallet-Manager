@@ -51,15 +51,20 @@ class BacktestPredictions implements ShouldQueue
                 : DB::table('corpwalletmanager_predictions')->distinct()->pluck('corporation_id')->all();
 
             $processed = 0;
+            $failures = [];
             foreach ($corpIds as $corpId) {
                 try {
                     $result = $backtest->runForCorporation((int) $corpId);
                     if ($result !== null) {
                         $processed++;
                     }
-                } catch (\Illuminate\Database\QueryException $e) {
-                    throw $e;
                 } catch (\Throwable $e) {
+                    // One corporation must never abort the run. This used to
+                    // re-throw QueryException, which meant a single corp's DB
+                    // error (an out-of-range metric, a missing column) killed
+                    // the backtest for every other corp too. Record it and
+                    // carry on; the failures surface on the log entry below.
+                    $failures[] = $corpId . ': ' . $e->getMessage();
                     Log::warning('BacktestPredictions: failed for corporation', [
                         'corporation_id' => $corpId,
                         'error' => $e->getMessage(),
@@ -68,9 +73,12 @@ class BacktestPredictions implements ShouldQueue
             }
 
             $logEntry->update([
-                'status' => RecalcLog::STATUS_COMPLETED,
+                'status' => empty($failures) ? RecalcLog::STATUS_COMPLETED : RecalcLog::STATUS_FAILED,
                 'completed_at' => now(),
                 'records_processed' => $processed,
+                'error_message' => empty($failures)
+                    ? null
+                    : substr(count($failures) . ' corporation(s) failed - ' . implode(' | ', $failures), 0, 1000),
             ]);
         } catch (\Throwable $e) {
             if ($logEntry) {
