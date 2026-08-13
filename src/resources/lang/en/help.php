@@ -79,7 +79,7 @@ return [
     'version_upgrade_recipe_note'    => 'Bringing the stack fully down (not just restart) clears the default Redis container, which flushes queued background jobs that may carry pre-v3 class FQNs. Container boot pulls the latest plugin via Composer, runs any new migrations, and re-seeds schedules automatically.',
     'version_source_composer'        => "Resolved via Composer's installed.json (preferred).",
     'version_source_constant'        => "Resolved via the CWM_VERSION constant (fallback for non-Composer installs).",
-    'version_source_hint'            => "Installed version comes from Composer's runtime metadata when available; the v3.0.1 release tag is hardcoded. No external HTTP calls.",
+    'version_source_hint'            => "Installed version comes from Composer's runtime metadata when available; the v3.0.2 release tag is hardcoded. No external HTTP calls.",
 
     // ============================================================
     // Welcome (sidebar entry 3)
@@ -226,6 +226,9 @@ return [
     'kf_alliance_tax_title' => 'Alliance Tax Reconciliation',
     'kf_alliance_tax_body'  => 'Compares expected (per-bucket rate math) vs actual (outgoing payments matching configured recipient IDs or keywords) over the trailing 3 / 6 / 12 months. Per-month detail table flags overpaid / underpaid gaps.',
 
+    'kf_planetary_tax_title' => 'Planetary Tax by System',
+    'kf_planetary_tax_body'  => 'Breaks the corp PI customs tax (POCO import + export duty) down by solar system: which systems earn it, import vs export, share of the total, and month-over-month, with a per-planet drill-down. Import-vs-export trend chart over 30 / 90 / 180 day / 1 year windows.',
+
     'kf_webhooks_title' => 'Per-Corp Discord Webhooks',
     'kf_webhooks_body'  => 'Any number of webhooks per corp, each with its own role mention, choice of report types, and choice of alert types. Per-webhook delivery health tracking. Notification Routing Map surfaces silent categories.',
 
@@ -368,7 +371,7 @@ return [
 
     // Director Tabs
     'director_tabs_title' => 'Director View - Tab Guide',
-    'director_tabs_intro' => 'The Director View provides comprehensive financial oversight through nine specialised tabs: Overview, Analytics, Trends, Performance, Cash Flow, Reports, plus three new in v3.0.0 - Top Contributors, Profit Attribution, and Alliance Tax. Each tab offers unique insights and tools for managing your corporation\'s finances.',
+    'director_tabs_intro' => 'The Director View provides comprehensive financial oversight through a set of specialised tabs: Overview, Analytics, Trends, Performance, Cash Flow, and Reports, plus the analytics tabs Top Contributors, Profit Attribution, Expense Attribution, Alliance Tax, and Planetary Tax. Each tab offers unique insights and tools for managing your corporation\'s finances.',
 
     'purpose' => 'Purpose',
     'features' => 'Features',
@@ -468,6 +471,16 @@ return [
         <li>Keyword matching is case-insensitive and contains-based with LIKE wildcards properly escaped, so a literal <code>%</code> in a memo does not become a wildcard.</li>
     </ul>',
     'alliance_tax_tab_best' => 'Auditing alliance remittance, catching missed payments, validating per-bucket rates against actual outflows',
+
+    'planetary_tax_tab_title' => 'Planetary Tax by System',
+    'planetary_tax_tab_purpose' => 'Shows which solar systems generate the corporation\'s Planetary Interaction customs tax (POCO import + export duty). Each tax row is resolved to its planet\'s solar system through the SDE, so you can see where the PI income actually comes from instead of just the corp-wide total.',
+    'planetary_tax_tab_features' => '<ul>
+        <li><strong>Per-system table</strong>: import duty, export duty, total, share of the PI total, and month-over-month change per system. Click a system to expand its planets (per-POCO detail).</li>
+        <li><strong>Summary tiles</strong>: total PI tax this period with an up / down change vs last month, plus the import and export split.</li>
+        <li><strong>Import vs export trend chart</strong>: a selectable window (30 / 90 / 180 days / 1 year) with buckets that auto-scale from daily to monthly. Two series (import + export), not per-system, so it stays readable however many systems you tax.</li>
+        <li><strong>No setup</strong>: reads the wallet journal and the SDE live, so there is nothing to backfill or schedule.</li>
+    </ul>',
+    'planetary_tax_tab_best' => 'Spotting which systems and planets drive PI income, tracking import vs export trends, and prioritising POCO placement',
 
     'data_refresh' => 'Data Refresh',
     'data_refresh_desc' => 'Most tabs refresh automatically every 5 minutes. Manual refresh buttons are available on each tab for immediate updates. The refresh rate can be configured in Settings. Top Contributors / Profit Attribution / Alliance Tax lazy-load on tab open and re-query when the period selector changes.',
@@ -580,7 +593,7 @@ GROUP BY corporation_id, prediction_method;',
         <li><strong>Custom:</strong> Generate reports for any date range you specify. Perfect for board meetings or specific period analysis.</li>
         <li><strong>Weekly:</strong> Automated Monday summaries showing the previous week\'s financial performance.</li>
         <li><strong>Monthly:</strong> Comprehensive monthly summaries delivered on the 1st of each month.</li>
-        <li><strong>Annual</strong> (v3.0.0): A multi-section retrospective covering a full calendar year. PDF has a cover page + Executive Summary + Monthly Trend + Top 10 Contributors + Activity Mix + Notable Transactions + Division Performance + Alliance Tax Remits + Milestones Reached + Risk Assessment + Year-over-Year comparison. CSV mirrors the same seven retrospective sections. Generate from the Director view Reports tab (year picker appears when type is Annual).</li>
+        <li><strong>Annual</strong> (v3.0.0): A multi-section retrospective covering a full calendar year. PDF has a cover page + Executive Summary + Monthly Trend + Top 10 Contributors + Activity Mix + Notable Transactions + Division Performance + Alliance Tax Remits + Planetary Tax by System + Milestones Reached + Risk Assessment + Year-over-Year comparison. CSV mirrors the same retrospective sections. Generate from the Director view Reports tab (year picker appears when type is Annual).</li>
         <li><strong>Quarterly</strong> (v3.0.0): Same multi-section template as Annual, scoped to one fiscal quarter with Quarter-over-Quarter comparison instead of YoY. Generate from the Director view Reports tab (quarter picker appears when type is Quarterly).</li>
     </ul>',
 
@@ -1135,7 +1148,7 @@ GROUP BY corporation_id, prediction_method;',
     'diagnostic_tabs_list' => '<ul>
         <li><strong>Health Checks:</strong> Tier-1 universal - schedule health, queue depth, ESI rate-limit signal, recent job error counts, recent webhook delivery errors. The default landing tab.</li>
         <li><strong>Master Test:</strong> Tier-1 universal - runs every other tab in sequence and rolls up a single pass / fail.</li>
-        <li><strong>System Validation:</strong> Tier-1 universal - companion plugin detection (Manager Core / Mining Manager / HR Manager / Buyback Manager), PluginBridge capability registration, PHP / Composer version sanity checks.</li>
+        <li><strong>System Validation:</strong> Tier-1 universal - companion plugin detection (Manager Core / Mining Manager / HR Manager / Buyback Manager), PluginBridge capability registration, PHP / Composer version sanity checks, and an SDE (<code>mapDenormalize</code>) readiness check, which is what the Planetary Tax tab needs to resolve each customs-tax row to its solar system.</li>
         <li><strong>Settings Health:</strong> Tier-1 universal - confirms required settings have values, alert thresholds default to 0 are flagged as disabled.</li>
         <li><strong>Data Integrity:</strong> Tier-1 universal - table row counts, duplicate detection, orphaned predictions, missing corp references.</li>
         <li><strong>Wallet Trace:</strong> CWM-specific (Tier 3) - paste a journal id and the trace walks the row through every step: corp / division resolve, ref_type classify, party / context resolve via the entity-name fallback chain, alert decision (would-trigger / would-not), filter decision (inter-division transfer flagged with callout).</li>

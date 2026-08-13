@@ -295,6 +295,25 @@ class ReportsController extends Controller
                     fputcsv($out, []);
                 }
 
+                if (! empty($data['planetary_tax']['by_system'])) {
+                    $pt = $data['planetary_tax'];
+                    fputcsv($out, ['PLANETARY TAX BY SYSTEM']);
+                    fputcsv($out, ['System', 'Security', 'Import Tax (ISK)', 'Export Tax (ISK)', 'Total (ISK)', '% of PI', 'Transactions']);
+                    foreach ($pt['by_system'] as $sys) {
+                        $s = (array) $sys;
+                        fputcsv($out, [
+                            $s['system'] ?? '',
+                            $s['security'] === null ? '' : number_format((float) $s['security'], 1),
+                            number_format((float) ($s['import_tax'] ?? 0), 2, '.', ''),
+                            number_format((float) ($s['export_tax'] ?? 0), 2, '.', ''),
+                            number_format((float) ($s['total'] ?? 0), 2, '.', ''),
+                            number_format((float) ($s['pct_of_total'] ?? 0), 1),
+                            (int) ($s['tx_count'] ?? 0),
+                        ]);
+                    }
+                    fputcsv($out, []);
+                }
+
                 if (! empty($data['risk_assessment'])) {
                     $ra = $data['risk_assessment'];
                     fputcsv($out, ['RISK ASSESSMENT']);

@@ -352,10 +352,10 @@
                 <p>
                     <strong>{{ trans('corpwalletmanager::help.version') }}:</strong>
                     <span class="badge badge-secondary" style="font-size: 0.9rem; vertical-align: middle;">
-                        v{{ $installedVersion ?? '3.0.1' }}
+                        v{{ $installedVersion ?? '3.0.2' }}
                     </span>
                     <span class="badge" style="background:#667eea; color:#fff; font-size: 0.85rem; vertical-align: middle;">
-                        {{ $releaseTag ?? 'v3.0.1' }} &middot; {{ $releaseCodename ?? 'Corp Financial Pulse' }}
+                        {{ $releaseTag ?? 'v3.0.2' }} &middot; {{ $releaseCodename ?? 'Planetary Tax' }}
                     </span>
                     <span class="badge" style="background:#3a4049; color:#cbd5e1; font-size: 0.85rem; vertical-align: middle;">SeAT 5.0</span>
                 </p>
@@ -590,6 +590,11 @@
                         <p>{{ trans('corpwalletmanager::help.kf_alliance_tax_body') }}</p>
                     </div>
                     <div class="feature-item">
+                        <i class="fas fa-globe"></i>
+                        <h5>{{ trans('corpwalletmanager::help.kf_planetary_tax_title') }}</h5>
+                        <p>{{ trans('corpwalletmanager::help.kf_planetary_tax_body') }}</p>
+                    </div>
+                    <div class="feature-item">
                         <i class="fab fa-discord"></i>
                         <h5>{{ trans('corpwalletmanager::help.kf_webhooks_title') }}</h5>
                         <p>{{ trans('corpwalletmanager::help.kf_webhooks_body') }}</p>
@@ -779,6 +784,14 @@
                     <p><strong>{{ trans('corpwalletmanager::help.features') }}:</strong></p>
                     {!! trans('corpwalletmanager::help.alliance_tax_tab_features') !!}
                     <p><strong>{{ trans('corpwalletmanager::help.best_for') }}:</strong> {{ trans('corpwalletmanager::help.alliance_tax_tab_best') }}</p>
+                </div>
+
+                <div class="tab-explanation">
+                    <h5><i class="fas fa-globe"></i> {{ trans('corpwalletmanager::help.planetary_tax_tab_title') }}</h5>
+                    <p><strong>{{ trans('corpwalletmanager::help.purpose') }}:</strong> {!! trans('corpwalletmanager::help.planetary_tax_tab_purpose') !!}</p>
+                    <p><strong>{{ trans('corpwalletmanager::help.features') }}:</strong></p>
+                    {!! trans('corpwalletmanager::help.planetary_tax_tab_features') !!}
+                    <p><strong>{{ trans('corpwalletmanager::help.best_for') }}:</strong> {{ trans('corpwalletmanager::help.planetary_tax_tab_best') }}</p>
                 </div>
 
                 <div class="info-box">

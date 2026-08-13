@@ -221,6 +221,15 @@ Route::group([
         ->name('corpwalletmanager.analytics.alliance-tax-reconciliation')
         ->middleware('can:corpwalletmanager.director_view');
 
+    // Planetary Tax Tab Routes
+    Route::get('/api/analytics/planetary-tax', 'AnalyticsController@planetaryTax')
+        ->name('corpwalletmanager.analytics.planetary-tax')
+        ->middleware('can:corpwalletmanager.director_view');
+
+    Route::get('/api/analytics/planetary-tax-trend', 'AnalyticsController@planetaryTaxTrend')
+        ->name('corpwalletmanager.analytics.planetary-tax-trend')
+        ->middleware('can:corpwalletmanager.director_view');
+
     Route::post('/reports/generate', 'ReportsController@generate')
         ->name('corpwalletmanager.reports.generate')
         ->middleware('can:corpwalletmanager.director_view');

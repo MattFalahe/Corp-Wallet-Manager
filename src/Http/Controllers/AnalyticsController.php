@@ -1520,6 +1520,113 @@ class AnalyticsController extends Controller
     }
 
     /**
+     * Planetary Interaction customs-tax breakdown by solar system for the
+     * Director view's Planetary Tax tab. Resolves each POCO tax row's
+     * planet (context_id) to its system via the SDE and aggregates
+     * import / export / total per system for the given month, with a
+     * per-planet drill-down. See PlanetaryTaxService for the data model.
+     */
+    public function planetaryTax(Request $request)
+    {
+        try {
+            $corporationId = $this->getCorporationId($request);
+            if (! $corporationId) {
+                return response()->json([
+                    'success'   => false,
+                    'message'   => 'Corporation not selected.',
+                    'by_system' => [],
+                ], 400);
+            }
+
+            $period = $request->get('period');
+            if (! preg_match('/^\d{4}-\d{2}$/', (string) $period)) {
+                $period = Carbon::now()->format('Y-m');
+            }
+
+            $result = app(\CorpWalletManager\Services\PlanetaryTaxService::class)
+                ->getCurrentPeriod((int) $corporationId, $period);
+
+            return response()->json([
+                'success'        => true,
+                'corporation_id' => $result['corporation_id'],
+                'period'         => $result['period'],
+                'total_import'   => $result['total_import'],
+                'total_export'   => $result['total_export'],
+                'total'          => $result['total'],
+                'prior_total'    => $result['prior_total'],
+                'by_system'      => $result['by_system'],
+            ]);
+        } catch (\Exception $e) {
+            Log::error('planetaryTax failed', [
+                'error' => $e->getMessage(),
+            ]);
+            return response()->json([
+                'success'   => false,
+                'message'   => 'Failed to load planetary tax breakdown.',
+                'by_system' => [],
+            ], 500);
+        }
+    }
+
+    /**
+     * Import vs export PI customs-tax totals over a trailing day window
+     * (30 / 90 / 180 / 365) for the Planetary Tax tab's trend chart. Two
+     * series only, so the chart stays readable regardless of how many
+     * systems the corp taxes. See PlanetaryTaxService::getTrend.
+     */
+    public function planetaryTaxTrend(Request $request)
+    {
+        try {
+            $corporationId = $this->getCorporationId($request);
+            if (! $corporationId) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Corporation not selected.',
+                    'labels'  => [],
+                    'import'  => [],
+                    'export'  => [],
+                ], 400);
+            }
+
+            $days = (int) $request->get('days', 90);
+            if (! in_array($days, \CorpWalletManager\Services\PlanetaryTaxService::TREND_WINDOWS, true)) {
+                $days = 90;
+            }
+
+            // 5-minute cache, matching the other trend endpoints: the
+            // underlying journal only refreshes hourly via SeAT's ESI sync,
+            // so a short TTL keeps repeat tab-opens instant without serving
+            // stale numbers.
+            $cacheKey = 'cwm:planetary-tax-trend:' . (int) $corporationId . ':' . $days;
+            $result = Cache::remember($cacheKey, 300, function () use ($corporationId, $days) {
+                return app(\CorpWalletManager\Services\PlanetaryTaxService::class)
+                    ->getTrend((int) $corporationId, $days);
+            });
+
+            return response()->json([
+                'success'        => true,
+                'corporation_id' => $result['corporation_id'],
+                'days'           => $result['days'],
+                'bucket'         => $result['bucket'],
+                'labels'         => $result['labels'],
+                'import'         => $result['import'],
+                'export'         => $result['export'],
+            ]);
+        } catch (\Exception $e) {
+            Log::error('planetaryTaxTrend failed', [
+                'error' => $e->getMessage(),
+            ]);
+            return response()->json([
+                'success' => false,
+                'message' => 'Failed to load planetary tax trend.',
+                'labels'  => [],
+                'import'  => [],
+                'export'  => [],
+            ], 500);
+        }
+    }
+
+    /**
      * Alliance tax reconciliation for the Director view's Alliance Tax
      * tab. Returns a per-period view comparing expected alliance tax
      * (calculated from per-bucket rates × corp-wide income) against

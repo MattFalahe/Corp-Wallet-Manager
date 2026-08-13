@@ -21,7 +21,7 @@ When Manager Core is installed, CWM publishes seven wallet and member topics to 
 
 ### 📊 Director Analytics
 
-Four director-view tabs answer the operator's most common questions about corp finances, backed by a per-character contribution cache that classifies every journal row into a per-member bucket.
+Five director-view tabs answer the operator's most common questions about corp finances.
 
 | Tab | Question it answers |
 |-----|---------------------|
@@ -29,6 +29,7 @@ Four director-view tabs answer the operator's most common questions about corp f
 | **Profit Attribution by Activity** | What activity drove the corp's profit this period? Pie chart of per-activity share, per-activity efficiency table (total, members, avg per member, percent of profit, trend), and a multi-line trailing-months trend. |
 | **Expense Attribution by Category** | Where did the corp's ISK go? A hardcoded nine-category taxonomy that survives across CCP ref_type drift (Alliance Tax, Corp Withdrawal, Market Fees, Office Rental, Industry Costs, Contracts, Structure & Sovereignty, Insurance & War, Other). Pie, per-category table, and a click-to-toggle multi-line trend. |
 | **Alliance Tax Reconciliation** | Is the corp's alliance remit math right? Expected (per-bucket income times per-bucket rate) vs actual (outgoing payments matching configured recipient IDs or description keywords) over the trailing 3 / 6 / 12 months, with a per-month detail table flagging overpaid and underpaid gaps. |
+| **Planetary Tax by System** | Which systems generate the corp's PI customs tax? Per-system breakdown of POCO import + export duty (each tax row resolved to its planet's solar system via the SDE), with the import/export split, share of the total, month-over-month change, and a per-planet drill-down. An import-vs-export trend chart offers 30 / 90 / 180 day / 1 year windows and stays readable no matter how many systems you tax. |
 
 ### 👤 Member-Facing Surface
 
@@ -53,8 +54,8 @@ Scheduling moved from two hardcoded ScheduleSeeder entries (that fired blanket f
 | Type | Shape | Best for |
 |------|-------|----------|
 | **Daily** | Terse: balance + flow + risk indicator | Morning pulse-check (5 second read) |
-| **Weekly** | Retro sections: top contributors + activity mix + alliance tax + anomalies | Monday leadership sync |
-| **Monthly** | Full retro: contributors + mix + alliance tax + notable transactions + anomalies + MM compliance + milestones | Month-end close |
+| **Weekly** | Retro sections: top contributors + activity mix + alliance tax + planetary tax + anomalies | Monday leadership sync |
+| **Monthly** | Full retro: contributors + mix + alliance tax + planetary tax + notable transactions + anomalies + MM compliance + milestones | Month-end close |
 | **Quarterly** | Multi-section PDF: cover + executive summary + QoQ comparison | Board pack |
 | **Annual** | Multi-section PDF: cover + executive summary + YoY comparison + milestones reached | Yearly retrospective |
 | **Executive** | KPI snapshot + headline + risk + top 3 contributors | CEO one-pager |
@@ -75,7 +76,7 @@ Settings -> Data Export. Pick sections (journal, contributions, reports, alerts,
 
 ### 🩺 Diagnostics
 
-An admin-only Diagnostic page at `/corp-wallet-manager/diagnostic` (gated by `corpwalletmanager.settings`, intentionally not in the sidebar). Five universal tabs (Health Checks, Master Test, System Validation, Settings Health, Data Integrity) plus four CWM-specific tabs: Wallet Trace walks a single journal row through the full classify -> alert -> publish pipeline, Donation Audit batch-displays every `player_donation` row in a corp and month with the classifier decision and the Mining Manager link side by side, Schedule Trace walks a corporation and cadence through the dispatcher to show exactly which webhooks would deliver and what period the next firing covers, and Notification Testing fires test webhook deliveries on demand. The System Validation tab carries a cross-plugin detection block, and Data Integrity surfaces schedule status, personal wallet aggregator status, and open anomaly latches.
+An admin-only Diagnostic page at `/corp-wallet-manager/diagnostic` (gated by `corpwalletmanager.settings`, intentionally not in the sidebar). Five universal tabs (Health Checks, Master Test, System Validation, Settings Health, Data Integrity) plus four CWM-specific tabs: Wallet Trace walks a single journal row through the full classify -> alert -> publish pipeline, Donation Audit batch-displays every `player_donation` row in a corp and month with the classifier decision and the Mining Manager link side by side, Schedule Trace walks a corporation and cadence through the dispatcher to show exactly which webhooks would deliver and what period the next firing covers, and Notification Testing fires test webhook deliveries on demand. The System Validation tab carries a cross-plugin detection block plus an SDE readiness check (what Planetary Tax needs to resolve systems), and Data Integrity surfaces schedule status, personal wallet aggregator status, and open anomaly latches.
 
 ---
 
