@@ -306,6 +306,20 @@ class ContributionService
     }
 
     /**
+     * Mining Manager's bills that count toward tax compliance. A bill a
+     * director deleted, or let off as waived or exempted, counts as never
+     * billed in Mining Manager; read as owed and unpaid it marked the member
+     * down for a bill nobody was asked to pay. The query builder does not skip
+     * deleted rows the way Mining Manager's model does.
+     */
+    private function mmBilledTaxes(): \Illuminate\Database\Query\Builder
+    {
+        return DB::table('mining_taxes')
+            ->whereNull('deleted_at')
+            ->whereNotIn('status', ['waived', 'exempted']);
+    }
+
+    /**
      * Has Mining Manager linked this corp wallet journal id to one of
      * its tax invoices? Returns true when mining_taxes.transaction_id
      * matches; false when MM is not installed, the table is missing,
@@ -1766,7 +1780,7 @@ class ContributionService
             $monthStart = $period . '-01';
             $monthEnd   = date('Y-m-t', strtotime($monthStart));
 
-            $rows = DB::table('mining_taxes')
+            $rows = $this->mmBilledTaxes()
                 ->whereIn('character_id', $characterIds)
                 ->whereBetween('period_start', [$monthStart, $monthEnd])
                 ->selectRaw('character_id, SUM(amount_owed) AS owed, SUM(amount_paid) AS paid')
@@ -2158,7 +2172,7 @@ class ContributionService
         // periods are 'Y-m' strings; the lexicographic min is the earliest.
         $earliest = min($periods) . '-01';
 
-        $rows = DB::table('mining_taxes')
+        $rows = $this->mmBilledTaxes()
             ->whereIn('character_id', $characterIds)
             ->where('period_start', '>=', $earliest)
             ->selectRaw('character_id, SUM(amount_owed) AS owed, SUM(amount_paid) AS paid')
@@ -2338,7 +2352,7 @@ class ContributionService
                 $monthStart = $p . '-01';
                 $monthEnd   = date('Y-m-t', strtotime($monthStart));
 
-                $row = DB::table('mining_taxes')
+                $row = $this->mmBilledTaxes()
                     ->where('character_id', $characterId)
                     ->whereBetween('period_start', [$monthStart, $monthEnd])
                     ->selectRaw('SUM(amount_owed) AS owed, SUM(amount_paid) AS paid')
@@ -2475,7 +2489,7 @@ class ContributionService
             // inside the range (matches the weekly-billing edge case
             // noted on getMmTaxBatch — periods crossing a range boundary
             // are attributed to whichever side period_start lands on).
-            $rows = DB::table('mining_taxes')
+            $rows = $this->mmBilledTaxes()
                 ->whereIn('character_id', $characterIds)
                 ->whereBetween('period_start', [$fromStr, $toStr])
                 ->selectRaw('character_id, SUM(amount_owed) AS owed, SUM(amount_paid) AS paid')
