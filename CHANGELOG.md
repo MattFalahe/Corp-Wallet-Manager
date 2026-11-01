@@ -5,6 +5,13 @@ All notable changes to Corp-Wallet-Manager will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Fixed
+
+- **A deleted or let-off Mining Manager bill marked a member down for tax compliance.** Compliance read every bill in Mining Manager's table, including ones a director deleted or let off as waived or exempted, which Mining Manager counts as never billed. Read as owed and unpaid, they lowered the member's compliance here, in HR Manager through `contribution.getCharacterTaxCompliance`, and in the `member.tax.compliance_dropped` check. They are left out now.
+- **Part payments of a Mining Manager bill were counted as voluntary donations.** Telling a tax payment from a donation relied on the payment Mining Manager last recorded on a bill, so the earlier payments of a bill paid in parts, and a transfer split across bills or kept as credit, counted as voluntary unless the reason carried the tax code. Every payment Mining Manager took as tax is recognised now, for journal rows read from the update on. Rows already counted keep their bucket.
+
 ## [3.0.2] - Planetary Tax (2026-08-13)
 
 Adds a Planetary Interaction customs-tax breakdown by solar system, and fixes four background-job bugs: three in the nightly backtest (two crashes plus the resilience issue that let one corporation abort the whole run) and one in the member milestone tracker.
