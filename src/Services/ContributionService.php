@@ -31,6 +31,9 @@ class ContributionService
     /** Cached MM-presence flag for the lifetime of this service instance. */
     private ?bool $mmInstalled = null;
 
+    /** Cached flag: does MM's payment claims table exist yet? */
+    private ?bool $mmClaimsTable = null;
+
     /**
      * In-memory cache for description-parsed name lookups. Keyed by
      * "name|corp_id" or "name|*"; value is the resolved character_id or
@@ -44,7 +47,7 @@ class ContributionService
 
     /**
      * In-memory cache of corp wallet journal ids that Mining Manager
-     * has linked to a tax invoice (via mining_taxes.transaction_id).
+     * took as tax payments (see isMmTaxPayment).
      * Populated lazily per-row by isMmTaxPayment, or in bulk by
      * prewarmMmTaxCache() at the start of applyJournalBatch to avoid
      * one DB hit per donation row.
@@ -168,8 +171,8 @@ class ContributionService
                     return null;
                 }
                 // Split tax vs voluntary. Priority order:
-                //   1. MM has linked this journal id to an invoice
-                //      (mining_taxes.transaction_id) — authoritative.
+                //   1. MM took this journal id as a tax payment
+                //      (see isMmTaxPayment) — authoritative.
                 //      Members pay tax via the same player_donation
                 //      ref_type as voluntary gifts; MM's own bookkeeping
                 //      is the only deterministic signal that a given
@@ -319,11 +322,22 @@ class ContributionService
             ->whereNotIn('status', ['waived', 'exempted']);
     }
 
+    /** Checked once per instance: isMmTaxPayment can run for every donation row. */
+    private function mmClaimsTableExists(): bool
+    {
+        return $this->mmClaimsTable ??= Schema::hasTable('mining_manager_processed_transactions');
+    }
+
     /**
-     * Has Mining Manager linked this corp wallet journal id to one of
-     * its tax invoices? Returns true when mining_taxes.transaction_id
-     * matches; false when MM is not installed, the table is missing,
-     * or the row is genuinely a voluntary donation.
+     * Did Mining Manager take this corp wallet journal id as a tax
+     * payment? True when a bill's mining_taxes.transaction_id or MM's
+     * payment claims table holds it; false when MM is not installed, the
+     * table is missing, or the row is genuinely a voluntary donation.
+     *
+     * transaction_id only keeps the payment that last touched a bill. A
+     * bill paid in parts, or a transfer split across bills or kept as
+     * credit, leaves the other payments only in the claims table, which
+     * holds every payment MM counts as tax.
      *
      * Single-row variant — public so DiagnosticController's Donation
      * Audit can call it without going through applyJournalBatch. Reuses
@@ -345,7 +359,10 @@ class ContributionService
         try {
             $exists = DB::table('mining_taxes')
                 ->where('transaction_id', (string) $journalId)
-                ->exists();
+                ->exists()
+                || ($this->mmClaimsTableExists() && DB::table('mining_manager_processed_transactions')
+                    ->where('transaction_id', $journalId)
+                    ->exists());
             return $this->mmTaxTransactionCache[$journalId] = $exists;
         } catch (\Throwable $e) {
             Log::warning('[Corp Wallet Manager] ContributionService: MM transaction link check failed', [
@@ -385,6 +402,13 @@ class ContributionService
                 ->pluck('transaction_id')
                 ->map(fn ($v) => (int) $v)
                 ->all();
+            if ($this->mmClaimsTableExists()) {
+                $linked = array_merge($linked, DB::table('mining_manager_processed_transactions')
+                    ->whereIn('transaction_id', $unseen)
+                    ->pluck('transaction_id')
+                    ->map(fn ($v) => (int) $v)
+                    ->all());
+            }
 
             $linkedSet = array_flip($linked);
             foreach ($unseen as $id) {
